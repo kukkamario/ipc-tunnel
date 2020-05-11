@@ -246,6 +246,24 @@ int platform_poll(void *priv)
 	return 0;
 }
 
+int platform_poll_noblock(void* priv)
+{
+    struct remoteproc *rproc = priv;
+	struct remoteproc_priv *prproc;
+	unsigned int flags;
+
+	prproc = rproc->priv;
+    
+    flags = metal_irq_save_disable();
+    if (!(atomic_flag_test_and_set(&prproc->nokick))) {
+        metal_irq_restore_enable(flags);
+        remoteproc_get_notification(rproc, RSC_NOTIFY_ID_ANY);
+        return 1;
+    }
+    metal_irq_restore_enable(flags);
+	return 0;
+}
+
 void platform_release_rpmsg_vdev(struct rpmsg_device *rpdev)
 {
 	(void)rpdev;

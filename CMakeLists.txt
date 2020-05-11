@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.13)
 project(Dippa)
 
+set(CMAKE_C_STANDARD 11)
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=armv7-a -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -fno-math-errno -fdata-sections -ffunction-sections")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=armv7-a -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -fno-math-errno -fdata-sections -ffunction-sections")
 set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -march=armv7-a -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -fno-math-errno -fdata-sections -ffunction-sections")
@@ -27,7 +29,3 @@ add_subdirectory(workload)
 add_subdirectory(variants)
 
 add_subdirectory(latency_test)
-
-add_executable(variant-ipc-tunnel-v3
-    src/main.c)
-target_link_libraries(variant-ipc-tunnel-v3 PRIVATE openamp_support bsp) # ipc-tunnel-v3 workload

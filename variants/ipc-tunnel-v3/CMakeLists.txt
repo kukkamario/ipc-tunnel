@@ -1,4 +1,4 @@
-add_library(ipc-tunnel-v3 ipc-tunnel.c)
+add_library(variant-ipc-tunnel-v3 ipc_tunnel.c variant.c)
 
-target_link_libraries(ipc-tunnel-v3 PRIVATE bsp)
+target_link_libraries(variant-ipc-tunnel-v3 PRIVATE bsp PUBLIC variant-header)
 

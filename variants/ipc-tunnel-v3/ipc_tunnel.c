@@ -3,18 +3,20 @@
 #include <string.h>
 
 #include <xil_mmu.h>
-
 #include <xil_printf.h>
+#include <xscugic.h>
+
+#include <stdatomic.h>
 
 typedef struct IpcTunnelControlHeader_s
 {
-    volatile uint32_t cpu0_write_index;
-    volatile uint32_t cpu0_read_index;
+    volatile _Atomic( uint32_t) cpu0_write_index;
+    volatile _Atomic( uint32_t) cpu0_read_index;
 
     uint32_t _padding1[6];
 
-    uint32_t cpu1_write_index;
-    uint32_t cpu1_read_index;
+    volatile _Atomic( uint32_t) cpu1_write_index;
+    volatile _Atomic( uint32_t) cpu1_read_index;
 
     uint32_t _padding2[6];
 } ControlHeader_t;
@@ -31,70 +33,6 @@ static uint32_t GetNextWriteIndex(IpcTunnel_t* tunnel, uint32_t writeIndex);
 static PacketHeader_t* GetWriteBufferPacket(IpcTunnel_t* tunnel, uint32_t index);
 static PacketHeader_t* GetReadBufferPacket(IpcTunnel_t* tunnel, uint32_t index);
 
-static const IpcTunnelConfig_t f_configs[] = {
-    {
-        .controlBlockAddress = 0xFFFF0000,
-        .sendBufferAddress = 0xFFFF0040,
-        .receiveBufferAddress = 0xFFFF1100,
-
-        .sendPacketMaxSize = 0x780,
-        .sendBufferedPacketCount = 2,
-        .receivePacketMaxSize = 0x780,
-        .receiveBufferedPacketCount = 2,
-
-        .cpu0KickSGI = INTERRUPT_CPU0_SGI_IPC_GENERAL,
-
-        .sharedMemoryAddress = 0,
-        .sharedMemorySize = 0
-    },
-    {
-        .controlBlockAddress = 0xFFFF2200,
-        .sendBufferAddress = 0xFFFF2240,
-        .receiveBufferAddress = 0xFFFF2800,
-
-        .sendPacketMaxSize = 0x120,
-        .sendBufferedPacketCount = 4,
-        .receivePacketMaxSize = 0x120,
-        .receiveBufferedPacketCount = 4,
-
-        .cpu0KickSGI = INTERRUPT_CPU0_SGI_IPC_PDP,
-
-        .sharedMemoryAddress = 0,
-        .sharedMemorySize = 0
-    },
-    {
-        .controlBlockAddress = 0xFFFF3000,
-        .sendBufferAddress = 0xFFFF3040,
-        .receiveBufferAddress = 0xFFFF5100,
-
-        .sendPacketMaxSize = 0x780,
-        .sendBufferedPacketCount = 4,
-        .receivePacketMaxSize = 0x780,
-        .receiveBufferedPacketCount = 4,
-
-        .cpu0KickSGI = INTERRUPT_CPU0_SGI_IPC_WTCP,
-
-        .sharedMemoryAddress = 0,
-        .sharedMemorySize = 0
-    },
-    {
-        .controlBlockAddress = 0xFFFF7200,
-        .sendBufferAddress = 0xFFFF7240,
-        .receiveBufferAddress = 0xFFFF9800,
-
-        .sendPacketMaxSize = 0x1200,
-        .sendBufferedPacketCount = 2,
-        .receivePacketMaxSize = 0x1200,
-        .receiveBufferedPacketCount = 2,
-
-        .cpu0KickSGI = INTERRUPT_CPU0_SGI_IPC_PROCESSDATALINK,
-
-        .sharedMemoryAddress = 0xFFFFC000,
-        .sharedMemorySize = 0x3000
-    }
-};
-
-
 void IPC_TUNNEL_Init(IpcTunnel_t* tunnel, const IpcTunnelConfig_t* config)
 {
     tunnel->config = config;
@@ -106,7 +44,6 @@ void IPC_TUNNEL_Init(IpcTunnel_t* tunnel, const IpcTunnelConfig_t* config)
     /* Actual size of the packet should include the header and alignment to 64 bit*/
     tunnel->sendPacketSize = ((config->sendPacketMaxSize + sizeof(PacketHeader_t)) + 7) & ~7u;
     tunnel->receivePacketSize = ((config->receivePacketMaxSize + sizeof(PacketHeader_t)) + 7) & ~7u;
-
 
     tunnel->directWriteIndex = 0;
 
@@ -132,8 +69,8 @@ uint16_t IPC_TUNNEL_Read(IpcTunnel_t* tunnel, uint8_t* buffer, uint16_t size)
 {
     uint32_t rx = 0;
 
-    uint32_t readIndex = tunnel->control->cpu1_read_index;
-    uint32_t cpu0WriteIndex = tunnel->control->cpu0_write_index;
+    uint32_t readIndex = atomic_load_explicit(&tunnel->control->cpu1_read_index, memory_order_acquire);
+    uint32_t cpu0WriteIndex = atomic_load_explicit(&tunnel->control->cpu0_write_index, memory_order_acquire);
 
     if (readIndex != cpu0WriteIndex) {
         PacketHeader_t* packet = GetReadBufferPacket(tunnel, readIndex);
@@ -149,7 +86,7 @@ uint16_t IPC_TUNNEL_Read(IpcTunnel_t* tunnel, uint8_t* buffer, uint16_t size)
     return rx;
 }
 
-boolean IPC_TUNNEL_Write(IpcTunnel_t* tunnel, const uint8_t* buffer, uint16_t size)
+bool IPC_TUNNEL_Write(IpcTunnel_t* tunnel, const uint8_t* buffer, uint16_t size)
 {
     if (size == 0)
     {
@@ -162,8 +99,8 @@ boolean IPC_TUNNEL_Write(IpcTunnel_t* tunnel, const uint8_t* buffer, uint16_t si
         return FALSE;
     }
 
-    uint32_t writeIndex = tunnel->control->cpu1_write_index;
-    uint32_t cpu0ReadIndex = tunnel->control->cpu0_read_index;
+    uint32_t writeIndex = atomic_load_explicit(&tunnel->control->cpu1_write_index, memory_order_acquire);
+    uint32_t cpu0ReadIndex = atomic_load_explicit(&tunnel->control->cpu0_read_index, memory_order_acquire);
     uint32_t nextWriteIndex = GetNextWriteIndex(tunnel, writeIndex);
 
     if (nextWriteIndex != cpu0ReadIndex)
@@ -193,9 +130,9 @@ uint8_t* IPC_TUNNEL_BeginDirectWrite(IpcTunnel_t* tunnel, uint16_t size)
         return 0;
     }
 
-    uint32_t writeIndex = tunnel->control->cpu1_write_index;
+    uint32_t writeIndex = atomic_load_explicit(&tunnel->control->cpu1_write_index, memory_order_acquire);
     uint32_t nextWriteIndex = GetNextWriteIndex(tunnel, writeIndex);
-    uint32_t cpu0ReadIndex = tunnel->control->cpu0_read_index;
+    uint32_t cpu0ReadIndex = atomic_load_explicit(&tunnel->control->cpu0_read_index, memory_order_acquire);
 
     if (nextWriteIndex != cpu0ReadIndex) {
         PacketHeader_t* packet = GetWriteBufferPacket(tunnel, writeIndex);
@@ -220,8 +157,8 @@ uint16_t IPC_TUNNEL_BeginDirectRead(IpcTunnel_t* tunnel, const uint8_t** dataPtr
 {
     uint32_t rx = 0;
 
-    uint32_t readIndex = tunnel->control->cpu1_read_index;
-    uint32_t cpu0WriteIndex = tunnel->control->cpu0_write_index;
+    uint32_t readIndex = atomic_load_explicit(&tunnel->control->cpu1_read_index, memory_order_acquire);
+    uint32_t cpu0WriteIndex = atomic_load_explicit(&tunnel->control->cpu0_write_index, memory_order_acquire);
 
     if (readIndex != cpu0WriteIndex) {
         PacketHeader_t* packet = GetReadBufferPacket(tunnel, readIndex);
@@ -250,43 +187,22 @@ uint32_t IPC_TUNNEL_GetSharedMemorySize(IpcTunnel_t* tunnel)
     return tunnel->config->sharedMemorySize;
 }
 
-const IpcTunnelConfig_t* IPC_TUNNEL_GetConfig(IpcTunnelConfigInstance_t tunnelIndex)
-{
-    return &f_configs[tunnelIndex];
-}
-
-
-
 static void MarkPacketAsRead(IpcTunnel_t* tunnel, uint32_t previousReadIndex)
 {
-    /* Data memory barrier to make sure that reading data has completed before
-     * we update cpu1_read_offset and allow other core to write over it
-     */
-    dmb();
-
     if (++previousReadIndex == tunnel->config->receiveBufferedPacketCount) {
         previousReadIndex = 0;
     }
 
-    tunnel->control->cpu1_read_index = previousReadIndex;
+    atomic_store_explicit(&tunnel->control->cpu1_read_index, previousReadIndex, memory_order_release);
 }
 
 static void SendPacket(IpcTunnel_t* tunnel, uint32_t nextWriteIndex)
 {
-    /* Data memory barrier to make sure that memcpy has completed before we
-     * update cpu1_write_offset and allow other core to read the packet.
-     *
-     * Other core can read this even before SGI is triggered when in it is
-     * in non-blocking mode
-     */
-    dmb();
-    tunnel->control->cpu1_write_index = nextWriteIndex;
-
-    /* Data synchronization barrier to make sure index is always updated
-     * before SGI is triggered.
-     */
-    dsb();
-    INTERRUPT_TriggerCPU0SGI(tunnel->config->cpu0KickSGI);
+    atomic_store_explicit(&tunnel->control->cpu1_write_index, nextWriteIndex, memory_order_release);
+    
+    /* Trigger software interrupt on the other CPU */
+    uint32_t mask = ((1 << 16U) | tunnel->config->cpu0KickSGI) & (XSCUGIC_SFI_TRIG_CPU_MASK | XSCUGIC_SFI_TRIG_INTID_MASK);
+    *(volatile uint32_t*)(XPAR_PS7_SCUGIC_0_DIST_BASEADDR + XSCUGIC_SFI_TRIG_OFFSET) = mask;
 }
 
 static uint32_t GetNextWriteIndex(IpcTunnel_t* tunnel, uint32_t writeIndex)

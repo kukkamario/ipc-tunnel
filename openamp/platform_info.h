@@ -86,6 +86,8 @@ platform_create_rpmsg_vdev(void *platform, unsigned int vdev_index,
  */
 int platform_poll(void *platform);
 
+int platform_poll_noblock(void *platform);
+
 /**
  * platform_release_rpmsg_vdev - release rpmsg virtio device
  *

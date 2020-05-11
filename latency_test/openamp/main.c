@@ -9,6 +9,8 @@
 #include <sleep.h>
 #include "packets.h"
 
+#include "variant.h"
+
 #define LPRINTF(format, ...) xil_printf(format, ##__VA_ARGS__)
 //#define LPRINTF(format, ...)
 #define LPERROR(format, ...) LPRINTF("ERROR: " format, ##__VA_ARGS__)
