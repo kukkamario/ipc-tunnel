@@ -8,22 +8,19 @@ extern "C" {
 #include <stdint.h>
 
 enum {
-    CONTROL_FLAG_SHUTDOWN = 1
+    CONTROL_FLAG_SHUTDOWN = 1,
+    CONTROL_FLAG_NEXT = 2,
 };
 
 typedef struct {
     uint64_t send_timestamp;
     uint64_t control_flags;
-    int dummyData1;
-    int dummyData2;
-    int dummyData3;
-    int dummyData4;
 } LinuxToBaremetal;
 
 typedef struct {
     uint64_t send_timestamp;
     uint64_t linux_to_baremetal_latency;
-    int dummyData;
+    uint64_t control_flags;
 } BaremetalToLinux;
 
 #ifdef __cplusplus

@@ -12,9 +12,12 @@ enum class Target {
 class CommInterface {
 public:
     virtual ~CommInterface() {}
+    virtual std::string GetInterfaceName() = 0;
     virtual bool Initialize() = 0;
     virtual void Send(Target t, const uint8_t* data, size_t size) = 0;
     virtual Target ReceiveAnyBlock(uint8_t* data, size_t& size) = 0;
+    
+    virtual uint16_t GetMaxPacketSize() const = 0;
 };
 
 

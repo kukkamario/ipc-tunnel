@@ -25,7 +25,19 @@ SET(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -Wl,-T ${CMAKE_CURRENT_LIST_DI
 add_subdirectory(bsp)
 add_subdirectory(openamp)
 
-add_subdirectory(workload)
 add_subdirectory(variants)
 
-add_subdirectory(latency_test)
+add_subdirectory(unit_tests)
+
+set(MAIN_SRCS
+	src/main.c
+	src/interrupt.c
+	src/scheduler.c
+	src/workload.c)
+
+add_executable(dippa-soft-openamp ${MAIN_SRCS})
+target_link_libraries(dippa-soft-openamp PRIVATE openamp_support bsp variant-openamp)
+
+
+add_executable(dippa-soft-ipc-tunnel-v3 ${MAIN_SRCS})
+target_link_libraries(dippa-soft-ipc-tunnel-v3 PRIVATE openamp_support bsp variant-ipc-tunnel-v3)

@@ -1,14 +1,23 @@
 #include "scheduler.h"
 
-#include "interrupt.h"
 #include <xttcps.h>
 #include <xparameters_ps.h>
+#include "interrupt.h"
 
-static void TimerT0Interrupt(void* timerPtr);
-static void Timer1MsInterrupt(void* timerPtr);
+static int TimerT0Interrupt(int irq, void* userData);
+
+static int T1Interrupt(int irq, void* userData);
+static int T2Interrupt(int irq, void* userData);
 
 static XTtcPs f_timerT0;
-static uint32_t f_t1Multiplier = 10;
+static uint32_t f_t1Multiplier = 4;
+static uint32_t f_t2Multiplier = 16;
+
+
+static void(*f_t0Task)(void) = 0;
+static void(*f_t1Task)(void) = 0;
+static void(*f_t2Task)(void) = 0;
+
 
 static void ConfigureTTCTimer(
         XTtcPs* timer,
@@ -16,7 +25,8 @@ static void ConfigureTTCTimer(
         uint32_t frequencyHz,
         InterruptNumber_t interruptId,
         InterruptPriority_t interruptPriority,
-        Xil_InterruptHandler interruptHandler)
+        int (*interruptHandler)(int, void*),
+        void* userData)
 {
     XTtcPs_Config* config = XTtcPs_LookupConfig(deviceId);
 
@@ -55,11 +65,8 @@ static void ConfigureTTCTimer(
     /* Only trigger interrupt when interval timeout is reached */
     XTtcPs_EnableInterrupts(timer, XTTCPS_IXR_INTERVAL_MASK);
 
-    INTERRUPT_RegisterHandler(
-                interruptId,
-                interruptHandler,
-                timer);
-
+    INTERRUPT_RegisterHandler(interruptId, interruptHandler, userData);
+    
     INTERRUPT_SetPriorityAndTriggerType(
                 interruptId,
                 interruptPriority,
@@ -73,21 +80,84 @@ static void ConfigureTTCTimer(
 void SCHEDULER_Init(const SchedulerConfig_t* conf)
 {
     f_t1Multiplier = conf->t1Multiplier;
+    f_t2Multiplier = conf->t2Multiplier;
+    
+    f_t0Task = conf->t0Task;
+    f_t1Task = conf->t1Task;
+    f_t2Task = conf->t2Task;
     ConfigureTTCTimer(
             &f_timerT0,
             XPAR_XTTCPS_0_DEVICE_ID,
-            f_t1Multiplier,
+            conf->t0Frequency,
             INTERRUPT_SPI_TTC0_2,
             INTERRUPT_PRIORITY_SCHEDULER_TIMER,
-            &TimerT0Interrupt);
+            &TimerT0Interrupt,
+            conf->t0Task);
+    
+    INTERRUPT_RegisterHandler(INTERRUPT_SGI_T1,
+                              &T1Interrupt,
+                              conf->t1Task);
+
+    INTERRUPT_SetPriorityAndTriggerType(
+                INTERRUPT_SGI_T1,
+                INTERRUPT_PRIORITY_T1,
+                INTERRUPT_TRIGGER_TYPE_RISING_EDGE);
+    
+    INTERRUPT_Enable(INTERRUPT_SGI_T1);
+    
+    INTERRUPT_RegisterHandler(INTERRUPT_SGI_T2,
+                              &T2Interrupt,
+                              conf->t2Task);
+
+    INTERRUPT_SetPriorityAndTriggerType(
+                INTERRUPT_SGI_T2,
+                INTERRUPT_PRIORITY_T2,
+                INTERRUPT_TRIGGER_TYPE_RISING_EDGE);
+    
+    INTERRUPT_Enable(INTERRUPT_SGI_T2);
 }
 
-static void TimerT0Interrupt(void* timerPtr)
+static uint32_t t1Counter = 0;
+static uint32_t t2Counter = 0;
+
+static int TimerT0Interrupt(int irq, void* userData)
 {
+    int (*task)(void) = userData;
     
+    ++t1Counter;
+    ++t2Counter;
+    
+    if (t1Counter == f_t1Multiplier) {
+        t1Counter = 0;
+        INTERRUPT_TriggerLocalSGI(INTERRUPT_SGI_T1);
+    }
+    
+    if (t2Counter == f_t2Multiplier) {
+        t2Counter = 0;
+        INTERRUPT_TriggerLocalSGI(INTERRUPT_SGI_T2);
+    }
+    return 1;
 }
 
-static void Timer1MsInterrupt(void* timerPtr)
+static int T1Interrupt(int irq, void* userData)
 {
+    (void)irq;
+    Xil_EnableNestedInterrupts();
+    int (*task)(void) = userData;
+    task();
+    Xil_DisableNestedInterrupts();
     
+    return 1;
+}
+
+static int T2Interrupt(int irq, void* userData)
+{
+    (void)irq;
+    Xil_EnableNestedInterrupts();
+    int (*task)(void) = userData;
+    
+    task();
+    Xil_DisableNestedInterrupts();
+    
+    return 1;
 }

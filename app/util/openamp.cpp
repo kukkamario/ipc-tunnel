@@ -151,6 +151,11 @@ OpenAMPComm::~OpenAMPComm()
         close(charfd);
 }
 
+std::string OpenAMPComm::GetInterfaceName()
+{
+    return "OpenAMP";
+}
+
 bool OpenAMPComm::Initialize()
 {
     int ret;
@@ -226,4 +231,9 @@ Target OpenAMPComm::ReceiveAnyBlock(uint8_t* data, size_t& size)
     }
 
     return Target::T0;
+}
+
+uint16_t OpenAMPComm::GetMaxPacketSize() const
+{
+    return 496;
 }
