@@ -14,13 +14,15 @@ enum {
 
 typedef struct {
     uint64_t send_timestamp;
-    uint64_t control_flags;
+    uint32_t control_flags;
+    uint32_t packet_id;
 } LinuxToBaremetal;
 
 typedef struct {
     uint64_t send_timestamp;
     uint64_t linux_to_baremetal_latency;
-    uint64_t control_flags;
+    uint32_t control_flags;
+    uint32_t packet_id;
 } BaremetalToLinux;
 
 #ifdef __cplusplus

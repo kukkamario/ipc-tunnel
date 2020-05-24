@@ -12,5 +12,7 @@ add_subdirectory(unit_tests)
 add_executable(dippa_app
     src/main.cpp)
 
+target_include_directories(dippa_app PRIVATE ../include)
+
 target_link_libraries(dippa_app
     PRIVATE Threads::Threads util)

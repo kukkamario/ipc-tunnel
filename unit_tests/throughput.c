@@ -29,38 +29,75 @@ static int sendPacketSize = 0;
 static int sendPacketCount = 0;
 
 static uint64_t totalReceiveTime = 0;
+static bool f_running = true;
+
+static void Phase0Read(uint8_t* buf, uint32_t packetSize, void* user) {
+    uint64_t timestamp;
+    XTime_GetTime(&timestamp);
+    
+    if (totalReceiveTime == 0) {
+        totalReceiveTime = timestamp;
+    }
+
+    LinuxToBaremetal* recv_data = (LinuxToBaremetal*)buf;
+    ++packetCounter;
+    
+    if (recvLatencyCount < MAX_RECV_LATENCIES) {
+        recvLatencies[recvLatencyCount] = (uint32_t)(timestamp - recv_data->send_timestamp);
+        recvLatencyCount++;
+    }
+    
+    if (recv_data->control_flags & CONTROL_FLAG_NEXT) {
+        phase = 1;
+        sendPacketSize = packetSize;
+        totalReceiveTime = timestamp - totalReceiveTime;
+        
+        //xil_printf("CONTROL_FLAG_NEXT received, moving to phase=1, control_flags: %x\r\n", (uint32_t)recv_data->control_flags);
+        usleep(50000);
+    }
+    else if (recv_data->control_flags & CONTROL_FLAG_SHUTDOWN) {
+        LPERROR("Shutdown request, control_flags: %x\r\n", (uint32_t)recv_data->control_flags);
+        f_running = false;
+    }
+}
+
+static void Phase2Read(uint8_t* buf, uint32_t packetSize, void* user) 
+{
+    LinuxToBaremetal* recv_data = (LinuxToBaremetal*)buf;
+    
+    if (recv_data->control_flags & CONTROL_FLAG_NEXT) {
+        sendPacketCount = 0;
+        recvLatencyCount = 0;
+        phase = 0;
+        packetCounter = 0;
+        
+        //xil_printf("CONTROL_FLAG_NEXT received, moving to phase=0, control_flags: %x\r\n", (uint32_t)recv_data->control_flags);
+        
+        BaremetalToLinux* packet = (BaremetalToLinux*)buffer;
+        XTime_GetTime(&packet->send_timestamp);
+        packet->control_flags = CONTROL_FLAG_NEXT;
+        packet->linux_to_baremetal_latency = totalReceiveTime;
+        
+        totalReceiveTime = 0;
+        
+        while (!VARIANT_WriteChan0(buffer, sendPacketSize)) { }
+    }
+    else {
+        if (recv_data->control_flags & CONTROL_FLAG_SHUTDOWN) {
+            LPERROR("Shutdown request, control_flags: %x\r\n", (uint32_t)recv_data->control_flags);
+            f_running = false;
+        }
+    }
+}
 
 static void Test(void) {
-    bool running = true;
-    while (running) {
+    f_running = true;
+    xil_printf("REMOTE: Starting test\r\n");
+    
+    while (f_running) {
         
         if (phase == 0) {
-            uint32_t packetSize = VARIANT_ReadChan0(buffer, sizeof(buffer));
-            uint64_t timestamp;
-            XTime_GetTime(&timestamp);
-            
-            if (totalReceiveTime == 0) {
-                totalReceiveTime = timestamp;
-            }
-
-            LinuxToBaremetal* recv_data = (LinuxToBaremetal*)buffer;
-            ++packetCounter;
-            
-            if (recvLatencyCount < MAX_RECV_LATENCIES) {
-                recvLatencies[recvLatencyCount] = (uint32_t)(timestamp - recv_data->send_timestamp);
-                recvLatencyCount++;
-            }
-            
-            if (recv_data->control_flags & CONTROL_FLAG_NEXT) {
-                phase = 1;
-                sendPacketSize = packetSize;
-                
-                totalReceiveTime = timestamp - totalReceiveTime;
-            }
-            if (recv_data->control_flags & CONTROL_FLAG_SHUTDOWN) {
-                LPERROR("Shutdown request\r\n");
-                running = false;
-            }
+            VARIANT_ReadChan0(buffer, sizeof(buffer), &Phase0Read, NULL);
         }
         else if (phase == 1) {
             
@@ -80,29 +117,15 @@ static void Test(void) {
             if (sendPacketCount == packetCounter) {
                 packet->control_flags |= CONTROL_FLAG_NEXT;
                 phase = 2;
+                
+                //xil_printf("All packets sent, moving to phase=2\r\n");
             }
             
             /* retry send as many times as it is necessary */
             while (!VARIANT_WriteChan0(buffer, sendPacketSize)) { }
         }
         else if (phase == 2) {
-            uint32_t packetSize = VARIANT_ReadChan0(buffer, sizeof(buffer));
-            LinuxToBaremetal* recv_data = (LinuxToBaremetal*)buffer;
-            
-            if (recv_data->control_flags & CONTROL_FLAG_NEXT) {
-                sendPacketCount = 0;
-                recvLatencyCount = 0;
-                phase = 0;
-                
-                BaremetalToLinux* packet = (BaremetalToLinux*)buffer;
-                XTime_GetTime(&packet->send_timestamp);
-                packet->control_flags = CONTROL_FLAG_NEXT;
-                packet->linux_to_baremetal_latency = totalReceiveTime;
-            }
-            if (recv_data->control_flags & CONTROL_FLAG_SHUTDOWN) {
-                LPERROR("Shutdown request\r\n");
-                running = false;
-            }
+            VARIANT_ReadChan0(buffer, sizeof(buffer), &Phase2Read, NULL);
         }
     }
 }

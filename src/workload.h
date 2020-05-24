@@ -1,6 +1,8 @@
 #ifndef WORKLOAD_H_
 #define WORKLOAD_H_
 
+void WORKLOAD_Init(void);
+
 void WORKLOAD_T0(void);
 void WORKLOAD_T1(void);
 void WORKLOAD_T2(void);

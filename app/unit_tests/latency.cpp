@@ -14,10 +14,17 @@ static void DoTest(CommInterface& comm);
 
 int main(int argc, char *argv[])
 {
-    OpenAMPComm comm;
-    comm.Initialize();
+    auto comm = CreateFromArgs(argc, argv);
+    if (!comm) {
+        return 1;
+    }
+    
+    if (!comm->Initialize(true)) {
+        std::cerr << "Failed to initialize communication" << std::endl;
+        return 1;
+    }
 
-    DoTest(comm);
+    DoTest(*comm);
 
     return 0;
 }
@@ -46,8 +53,7 @@ static void DoTest(CommInterface& comm)
         comm.Send(Target::T0, reinterpret_cast<const uint8_t*>(&req), sizeof(LinuxToBaremetal));
 
         BaremetalToLinux resp;
-        size_t respSize = sizeof(resp);
-        comm.ReceiveAnyBlock(reinterpret_cast<uint8_t*>(&resp), respSize);
+        size_t respSize = comm.ReceiveT0(reinterpret_cast<uint8_t*>(&resp), sizeof(resp));
         auto receive_time = global_timer::now();
 
         linuxToBaremetalLatencies[i] = global_timer::duration(resp.linux_to_baremetal_latency);

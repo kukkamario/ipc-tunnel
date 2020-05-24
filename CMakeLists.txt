@@ -35,9 +35,10 @@ set(MAIN_SRCS
 	src/scheduler.c
 	src/workload.c)
 
-add_executable(dippa-soft-openamp ${MAIN_SRCS})
-target_link_libraries(dippa-soft-openamp PRIVATE openamp_support bsp variant-openamp)
+set(variants openamp ipc-tunnel-ocm ipc-tunnel-ddr ipc-tunnel-ocm-cached ipc-tunnel-ddr-cached)
 
-
-add_executable(dippa-soft-ipc-tunnel-v3 ${MAIN_SRCS})
-target_link_libraries(dippa-soft-ipc-tunnel-v3 PRIVATE openamp_support bsp variant-ipc-tunnel-v3)
+foreach(var ${variants})
+	add_executable(dippa-soft-${var} ${MAIN_SRCS})
+	target_include_directories(dippa-soft-${var} PRIVATE include)
+	target_link_libraries(dippa-soft-${var} PRIVATE openamp_support bsp variant-${var})
+endforeach()

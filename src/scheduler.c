@@ -4,6 +4,8 @@
 #include <xparameters_ps.h>
 #include "interrupt.h"
 
+#include <x
+
 static int TimerT0Interrupt(int irq, void* userData);
 
 static int T1Interrupt(int irq, void* userData);
@@ -70,7 +72,7 @@ static void ConfigureTTCTimer(
     INTERRUPT_SetPriorityAndTriggerType(
                 interruptId,
                 interruptPriority,
-                INTERRUPT_TRIGGER_TYPE_RISING_EDGE);
+                INTERRUPT_TRIGGER_TYPE_HIGH);
 
     INTERRUPT_BindSPIToThisCPU(interruptId);
 
@@ -87,7 +89,7 @@ void SCHEDULER_Init(const SchedulerConfig_t* conf)
     f_t2Task = conf->t2Task;
     ConfigureTTCTimer(
             &f_timerT0,
-            XPAR_XTTCPS_0_DEVICE_ID,
+            XPAR_XTTCPS_2_DEVICE_ID,
             conf->t0Frequency,
             INTERRUPT_SPI_TTC0_2,
             INTERRUPT_PRIORITY_SCHEDULER_TIMER,
@@ -101,7 +103,7 @@ void SCHEDULER_Init(const SchedulerConfig_t* conf)
     INTERRUPT_SetPriorityAndTriggerType(
                 INTERRUPT_SGI_T1,
                 INTERRUPT_PRIORITY_T1,
-                INTERRUPT_TRIGGER_TYPE_RISING_EDGE);
+                INTERRUPT_TRIGGER_TYPE_HIGH);
     
     INTERRUPT_Enable(INTERRUPT_SGI_T1);
     
@@ -112,7 +114,7 @@ void SCHEDULER_Init(const SchedulerConfig_t* conf)
     INTERRUPT_SetPriorityAndTriggerType(
                 INTERRUPT_SGI_T2,
                 INTERRUPT_PRIORITY_T2,
-                INTERRUPT_TRIGGER_TYPE_RISING_EDGE);
+                INTERRUPT_TRIGGER_TYPE_HIGH);
     
     INTERRUPT_Enable(INTERRUPT_SGI_T2);
     
@@ -125,12 +127,15 @@ static uint32_t t2Counter = 0;
 
 static int TimerT0Interrupt(int irq, void* userData)
 {
-    int (*task)(void) = userData;
-    task();
+    xil_printf("T0 interrupt\r\n");
+    XTtcPs_ResetCounterValue(&f_timerT0);
+    uint32_t timerEvent = XTtcPs_GetInterruptStatus(&f_timerT0);
+    XTtcPs_ClearInterruptStatus(&f_timerT0, timerEvent);
+    
+    f_t0Task();
     
     ++t1Counter;
     ++t2Counter;
-    
     if (t1Counter == f_t1Multiplier) {
         t1Counter = 0;
         INTERRUPT_TriggerLocalSGI(INTERRUPT_SGI_T1);
@@ -140,16 +145,16 @@ static int TimerT0Interrupt(int irq, void* userData)
         t2Counter = 0;
         INTERRUPT_TriggerLocalSGI(INTERRUPT_SGI_T2);
     }
+
     return 1;
 }
 
 static int T1Interrupt(int irq, void* userData)
 {
     (void)irq;
-    Xil_EnableNestedInterrupts();
-    int (*task)(void) = userData;
-    task();
-    Xil_DisableNestedInterrupts();
+    //Xil_EnableNestedInterrupts();
+    f_t1Task();
+    //Xil_DisableNestedInterrupts();
     
     return 1;
 }
@@ -157,11 +162,9 @@ static int T1Interrupt(int irq, void* userData)
 static int T2Interrupt(int irq, void* userData)
 {
     (void)irq;
-    Xil_EnableNestedInterrupts();
-    int (*task)(void) = userData;
-    
-    task();
-    Xil_DisableNestedInterrupts();
+    //Xil_EnableNestedInterrupts();
+    f_t2Task();
+    //Xil_DisableNestedInterrupts();
     
     return 1;
 }

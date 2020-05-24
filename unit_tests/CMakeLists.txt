@@ -1,18 +1,13 @@
 #add_subdirectory(openamp)
 
-add_executable(latency-openamp latency.c)
-target_link_libraries(latency-openamp PRIVATE bsp openamp_support variant-openamp)
-target_include_directories(latency-openamp PRIVATE common)
+set(variants openamp ipc-tunnel-ocm ipc-tunnel-ddr ipc-tunnel-ocm-cached ipc-tunnel-ddr-cached)
 
-add_executable(latency-ipc-tunnel-v3 latency.c)
-target_link_libraries(latency-ipc-tunnel-v3 PRIVATE bsp openamp_support  variant-ipc-tunnel-v3)
-target_include_directories(latency-ipc-tunnel-v3 PRIVATE common)
-
-
-add_executable(throughput-openamp throughput.c)
-target_link_libraries(throughput-openamp PRIVATE bsp openamp_support variant-openamp)
-target_include_directories(throughput-openamp PRIVATE common)
-
-add_executable(throughput-ipc-tunnel-v3 throughput.c)
-target_link_libraries(throughput-ipc-tunnel-v3 PRIVATE bsp openamp_support  variant-ipc-tunnel-v3)
-target_include_directories(throughput-ipc-tunnel-v3 PRIVATE common)
+foreach(var ${variants})
+	add_executable(latency-${var} latency.c)
+	target_link_libraries(latency-${var} PRIVATE bsp openamp_support variant-${var})
+	target_include_directories(latency-${var} PRIVATE common)
+	
+	add_executable(throughput-${var} throughput.c)
+	target_link_libraries(throughput-${var} PRIVATE bsp openamp_support variant-${var})
+	target_include_directories(throughput-${var} PRIVATE common)
+endforeach()

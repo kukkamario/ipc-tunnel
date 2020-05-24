@@ -1,4 +1,6 @@
 add_library(util
     openamp.cpp
-    globaltimer.cpp)
+	comm.cpp
+	globaltimer.cpp
+	ipc_tunnel.cpp)
 target_include_directories(util INTERFACE .)

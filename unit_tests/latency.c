@@ -19,34 +19,38 @@ BaremetalToLinux reply;
 
 static uint8_t buffer[1024]  __attribute__ ((aligned (16)));
 
-static void Test(void) {
-    bool running = true;
-    while (running) {
-        uint32_t packetSize = VARIANT_ReadChan0(buffer, sizeof(buffer));
+static bool running = true;
+
+void ReadCallback(uint8_t* buf, uint32_t packetSize, void* user)
+{
+    if (packetSize == sizeof(LinuxToBaremetal)) {
+        uint64_t timestamp;
+        XTime_GetTime(&timestamp);
         
-        if (packetSize == sizeof(LinuxToBaremetal)) {
-            uint64_t timestamp;
-            XTime_GetTime(&timestamp);
-            
-            LinuxToBaremetal* recv_data = (LinuxToBaremetal*)buffer;
+        LinuxToBaremetal* recv_data = (LinuxToBaremetal*)buf;
     
-            reply.linux_to_baremetal_latency = timestamp - recv_data->send_timestamp;
-            
-            if (recv_data->control_flags & CONTROL_FLAG_SHUTDOWN) {
-                LPERROR("Shutdown request\r\n");
-                running = false;
-            }
-            else {
-                /* Wait a moment to allow linux app to invoke read to get the best possible latency */
-                usleep(5000);
-    
-                XTime_GetTime(&reply.send_timestamp);
-                if (!VARIANT_WriteChan0((const uint8_t*)&reply, sizeof(reply))) {
-                    xil_printf("rpmsg_send failed\r\n");
-                }
-            }
-            
+        reply.linux_to_baremetal_latency = timestamp - recv_data->send_timestamp;
+        
+        if (recv_data->control_flags & CONTROL_FLAG_SHUTDOWN) {
+            LPERROR("Shutdown request\r\n");
+            running = false;
         }
+        else {
+            /* Wait a moment to allow linux app to invoke read to get the best possible latency */
+            usleep(10000);
+    
+            XTime_GetTime(&reply.send_timestamp);
+            if (!VARIANT_WriteChan0((const uint8_t*)&reply, sizeof(reply))) {
+                xil_printf("rpmsg_send failed\r\n");
+            }
+        }
+    }
+
+}
+
+static void Test(void) {
+    while (running) {
+        VARIANT_ReadChan0(buffer, sizeof(buffer), &ReadCallback, NULL);
     }
 }
 

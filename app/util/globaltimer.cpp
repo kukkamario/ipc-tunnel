@@ -11,7 +11,7 @@
 #define GLOBAL_TIMER_PHYS_ADDR 0xF8F00200U
 namespace {
 
-volatile uint32_t* globalTimerRegs = 0;
+static volatile uint32_t* globalTimerRegs = 0;
 
 class InitGlobalTimerHelper {
 public:

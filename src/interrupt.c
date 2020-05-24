@@ -67,8 +67,6 @@ void INTERRUPT_BindSPIToThisCPU(InterruptNumber_t spiInterrupt)
 {
     /* This function should only be used with shared peripheral interrupts */
     Xil_AssertVoid(INTERRUPT_SPI_FIRST <= spiInterrupt && spiInterrupt <= INTERRUPT_SPI_LAST);
-
-    uint32_t Cpu_Id = XPAR_CPU_ID;
     
     volatile uint32_t* spiTargetRegisterPtr = (volatile uint32_t*)(
                 XPAR_SCUGIC_DIST_BASEADDR + XSCUGIC_SPI_TARGET_OFFSET_CALC(spiInterrupt));
@@ -77,11 +75,12 @@ void INTERRUPT_BindSPIToThisCPU(InterruptNumber_t spiInterrupt)
 	RegValue = *spiTargetRegisterPtr;
 
 	Offset = (spiInterrupt & 0x3U);
-	Cpu_Id = (0x1U << 1);
+	uint32_t Cpu_Id = (0x1U << XPAR_CPU_ID);
 
 	RegValue = (RegValue & (~(0xFFU << (Offset*8U))) );
 	RegValue |= ((Cpu_Id) << (Offset*8U));
 
+    xil_printf("Target offset reg %p: %x\r\n", spiTargetRegisterPtr, RegValue);
 	*spiTargetRegisterPtr = RegValue;
 }
 
@@ -94,10 +93,11 @@ void INTERRUPT_TriggerLocalSGI(InterruptNumber_t interrupt)
     *(volatile uint32_t*)(XPAR_PS7_SCUGIC_0_DIST_BASEADDR + XSCUGIC_SFI_TRIG_OFFSET) = mask;
 }
 
+/*
 void INTERRUPT_TriggerCPU0SGI(InterruptCpu0SGI_t interrupt)
 {
     uint32_t mask = ((1 << 16U) | interrupt) & (XSCUGIC_SFI_TRIG_CPU_MASK | XSCUGIC_SFI_TRIG_INTID_MASK);
     *(volatile uint32_t*)(XPAR_PS7_SCUGIC_0_DIST_BASEADDR + XSCUGIC_SFI_TRIG_OFFSET) = mask;
 }
-
+*/
 

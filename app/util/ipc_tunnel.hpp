@@ -1,26 +1,31 @@
-#ifndef OPENAMP_HPP_
-#define OPENAMP_HPP_
-
-
+#ifndef UTIL_IPC_TUNNEL_HPP_
+#define UTIL_IPC_TUNNEL_HPP_
 
 #include "comm.hpp"
 
-class OpenAMPComm final : public CommInterface {
+class IpcTunnel final : public CommInterface {
 public:
-    ~OpenAMPComm();
-	std::string GetInterfaceName() override;
+	enum class Memory {
+		DDR,
+		OCM
+	};
+
+	IpcTunnel(Memory mem);
+	~IpcTunnel();
+	
+    std::string GetInterfaceName() override;
     bool Initialize(bool blockT0) override;
     bool Send(Target t, const uint8_t* data, size_t size) override;
     size_t ReceiveT0(uint8_t* data, size_t bufSize) override;
-    
+
     void ReceiveT1OrT2(uint8_t* buf, size_t size, const std::function<void(Target, const uint8_t*, size_t)>& receiveCb) override;
     
-	uint16_t GetMaxPacketSize(Target t) const override;
+    uint16_t GetMaxPacketSize(Target t) const override;
 private:
-    bool InitDev(int i, bool block);
-    
-    int charfds[3] = {-1, -1, -1};
-    int fds[3] = {-1, -1, -1};
+	Memory mem;
+	
+	int fds[3];
 };
 
-#endif  // OPENAMP_HPP_
+
+#endif  // UTIL_IPC_TUNNEL_HPP_

@@ -64,13 +64,6 @@ typedef enum {
     INTERRUPT_INVALID = 0xFF
 } InterruptNumber_t;
 
-/** Software generated interrupts for CPU0 */
-typedef enum {
-    INTERRUPT_CPU0_SGI_TUNNEL_1 = 15,
-    INTERRUPT_CPU0_SGI_TUNNEL_2 = 14,
-    INTERRUPT_CPU0_SGI_TUNNEL_3 = 13
-} InterruptCpu0SGI_t;
-
 /* Lower priority value means higher priority */
 typedef enum {
     /* Timer or PWM interrupt for T0 */
@@ -97,7 +90,7 @@ typedef enum {
  */
 
 extern void INTERRUPT_RegisterHandler(InterruptNumber_t interrupt,
-        (*handler)(int, void*),
+        int (*handler)(int, void*),
         void* userData);
 
 extern void INTERRUPT_Enable(InterruptNumber_t interrupt);
@@ -124,9 +117,6 @@ extern void INTERRUPT_BindSPIToThisCPU(InterruptNumber_t spiInterrupt);
 
 /** Triggers software generated interrupt on this CPU */
 extern void INTERRUPT_TriggerLocalSGI(InterruptNumber_t interrupt);
-
-/** Triggers software generated interrupt on the CPU0 */
-extern void INTERRUPT_TriggerCPU0SGI(InterruptCpu0SGI_t interrupt);
 
 /** Disables IRQ and FIQ exceptions and returns the previous state of the CPSR register */
 static inline uint32_t INTERRUPT_EnterCritical(void){

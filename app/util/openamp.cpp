@@ -11,6 +11,8 @@
 
 #include <iostream>
 
+
+
 #define RPMSG_GET_KFIFO_SIZE 1
 #define RPMSG_GET_FREE_SPACE 3
 
@@ -146,9 +148,11 @@ static int get_rpmsg_chrdev_fd(const char *rpmsg_dev_name,
 
 OpenAMPComm::~OpenAMPComm()
 {
-    if (fd >= 0) close(fd);
-    if (charfd >= 0)
-        close(charfd);
+    for (int i = 0; i < 3; ++i) {
+        if (fds[i] >= 0) close(fds[i]);
+        if (charfds[i] >= 0)
+            close(charfds[i]);
+    }
 }
 
 std::string OpenAMPComm::GetInterfaceName()
@@ -156,15 +160,9 @@ std::string OpenAMPComm::GetInterfaceName()
     return "OpenAMP";
 }
 
-bool OpenAMPComm::Initialize()
+bool OpenAMPComm::Initialize(bool blockT0)
 {
     int ret;
-    const char *rpmsg_dev="virtio0.rpmsg-openamp-demo-channel.-1.0";
-    char rpmsg_char_name[16];
-    char fpath[256];
-    struct rpmsg_endpoint_info eptinfo;
-    char ept_dev_name[16];
-    char ept_dev_path[32];
 
     /* Load rpmsg_char driver */
     printf("\r\nMaster>probe rpmsg_char\r\n");
@@ -174,25 +172,97 @@ bool OpenAMPComm::Initialize()
         return false;
     }
 
-    printf("\r\n Open rpmsg dev %s! \r\n", rpmsg_dev);
-    sprintf(fpath, "%s/devices/%s", RPMSG_BUS_SYS, rpmsg_dev);
+    return InitDev(0, blockT0) && InitDev(1, false) && InitDev(2, false);
+}
+
+bool OpenAMPComm::Send(Target t, const uint8_t* data, size_t size)
+{
+    ssize_t written = write(fds[(int)t], data, size);
+    if (written == -1 && errno == EAGAIN) return false;
+    if (written != (ssize_t)size) {
+        std::cerr << "Failed to write " << size << ". ret: " << written << std::endl;
+        std::exit(1);
+    }
+    
+    return true;
+}
+
+size_t OpenAMPComm::ReceiveT0(uint8_t* data, size_t bufSize)
+{
+    ssize_t ret = 0;
+    do {
+        ret = read(fds[0], data, bufSize);
+    } while (ret == -1 && errno == EAGAIN);
+
+    if (ret == -1) {
+        perror("Failed to read");
+        return 0;
+    }
+    
+    return ret;
+}
+
+void OpenAMPComm::ReceiveT1OrT2(uint8_t* buf, size_t size, const std::function<void (Target, const uint8_t*, size_t)>& receiveCb)
+{
+    fd_set fd_set_t1t2;
+    FD_ZERO(&fd_set_t1t2);
+    FD_SET(fds[1], &fd_set_t1t2);
+    FD_SET(fds[2], &fd_set_t1t2);
+    
+    int readyFds = select(2, &fd_set_t1t2, 0, 0, 0);
+    if (readyFds > 0) {
+        if (FD_ISSET(fds[1], &fd_set_t1t2)) {
+            ssize_t readBytes = read(fds[1], buf, size);
+            if (readBytes > 0) {
+                receiveCb(Target::T1, buf, readBytes);
+            }
+        }
+        if (FD_ISSET(fds[2], &fd_set_t1t2)) {
+            ssize_t readBytes = read(fds[2], buf, size);
+            if (readBytes > 0) {
+                receiveCb(Target::T2, buf, readBytes);
+            }
+        }
+    }
+}
+
+uint16_t OpenAMPComm::GetMaxPacketSize(Target t) const
+{
+    (void)t;
+    return 496;
+}
+
+bool OpenAMPComm::InitDev(int i, bool block)
+{
+    ssize_t ret = 0;
+    std::string channelName = "dippa-channel" + std::to_string(i);
+    std::string rpmsg_dev="virtio0." + channelName + ".-1.0";
+    
+    char rpmsg_char_name[16];
+    char fpath[256];
+    struct rpmsg_endpoint_info eptinfo;
+    char ept_dev_name[16];
+    char ept_dev_path[32];
+    
+    printf("\r\n Open rpmsg dev %s! \r\n", rpmsg_dev.c_str());
+    sprintf(fpath, "%s/devices/%s", RPMSG_BUS_SYS, rpmsg_dev.c_str());
     if (access(fpath, F_OK)) {
         fprintf(stderr, "Not able to access rpmsg device %s, %s\n",
             fpath, strerror(errno));
         return false;
     }
-    ret = bind_rpmsg_chrdev(rpmsg_dev);
+    ret = bind_rpmsg_chrdev(rpmsg_dev.c_str());
     if (ret < 0)
         return ret;
-    charfd = get_rpmsg_chrdev_fd(rpmsg_dev, rpmsg_char_name);
-    if (charfd < 0)
+    charfds[i] = get_rpmsg_chrdev_fd(rpmsg_dev.c_str(), rpmsg_char_name);
+    if (charfds[i] < 0)
         return false;
 
     /* Create endpoint from rpmsg char driver */
-    strcpy(eptinfo.name, "rpmsg-openamp-demo-channel");
+    strcpy(eptinfo.name, channelName.c_str());
     eptinfo.src = 0;
     eptinfo.dst = 0xFFFFFFFF;
-    ret = rpmsg_create_ept(charfd, &eptinfo);
+    ret = rpmsg_create_ept(charfds[i], &eptinfo);
     if (ret) {
         printf("failed to create RPMsg endpoint.\n");
         return false;
@@ -201,39 +271,13 @@ bool OpenAMPComm::Initialize()
                     ept_dev_name))
         return -EINVAL;
     sprintf(ept_dev_path, "/dev/%s", ept_dev_name);
-    fd = open(ept_dev_path, O_RDWR /*| O_NONBLOCK*/);
-    if (fd < 0) {
+    fds[i] = open(ept_dev_path, O_RDWR | (block ? 0 : O_NONBLOCK));
+    if (fds[i] < 0) {
         perror("Failed to open rpmsg device.");
-        close(charfd);
+        close(charfds[i]);
+        charfds[i] = -1;
         return false;
     }
-
+    
     return true;
-}
-
-void OpenAMPComm::Send(Target t, const uint8_t* data, size_t size)
-{
-    ssize_t written = write(fd, data, size);
-    if (written != (ssize_t)size) {
-        std::cerr << "Failed to write " << size << ". ret: " << written << std::endl;
-    }
-}
-
-Target OpenAMPComm::ReceiveAnyBlock(uint8_t* data, size_t& size)
-{
-    ssize_t ret = 0;
-    do {
-        ret = read(fd, data, size);
-    } while (ret == -1 && errno == EAGAIN);
-
-    if (ret == -1) {
-        perror("Failed to read");
-    }
-
-    return Target::T0;
-}
-
-uint16_t OpenAMPComm::GetMaxPacketSize() const
-{
-    return 496;
 }

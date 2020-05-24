@@ -2,7 +2,7 @@
 petalinux-package --boot --kernel --u-boot --force -o /vagrant/dippa_linux.bin
 
 cd G:/projects/switch/env
-exec program_flash -f dippa_linux.bin -fsbl zynq_fsbl.elf -flash_type qspi_single -blank_check -verify -cable type xilinx_tcf url tcp:localhost:3121
+exec program_flash -f dippa_linux_ipc_tunnel.bin -fsbl zynq_fsbl.elf -flash_type qspi_single -blank_check -verify -cable type xilinx_tcf url tcp:localhost:3121
 
 echo variant-ipc-tunnel-v3 > /sys/class/remoteproc/remoteproc0/firmware
 echo start > /sys/class/remoteproc/remoteproc0/state
@@ -19,5 +19,108 @@ echo start > /sys/class/remoteproc/remoteproc0/state
 echo image_echo_test > /sys/class/remoteproc/remoteproc0/firmware
 echo start > /sys/class/remoteproc/remoteproc0/state
 
-
 https://github.com/NXPmicro/rpmsg-lite/
+
+
+RUN MAIN BENCHMARK
+
+echo dippa-soft-ipc-tunnel-ddr-cached > /sys/class/remoteproc/remoteproc0/firmware
+echo start > /sys/class/remoteproc/remoteproc0/state
+
+/root/dippa_app ipc_ddr
+
+echo stop > /sys/class/remoteproc/remoteproc0/state
+
+
+
+
+
+
+
+RUN UNIT TESTS
+
+
+
+
+#!/bin/sh
+
+echo latency-openamp > /sys/class/remoteproc/remoteproc0/firmware
+echo start > /sys/class/remoteproc/remoteproc0/state
+sleep 1
+/root/latency amp > latency-amp.txt
+echo stop > /sys/class/remoteproc/remoteproc0/state
+sleep 1
+
+echo throughput-openamp > /sys/class/remoteproc/remoteproc0/firmware
+echo start > /sys/class/remoteproc/remoteproc0/state
+sleep 1
+/root/throughput amp
+echo stop > /sys/class/remoteproc/remoteproc0/state
+sleep 1
+
+modprobe ipc-tunnel-cached
+
+echo latency-ipc-tunnel-ddr-cached > /sys/class/remoteproc/remoteproc0/firmware
+echo start > /sys/class/remoteproc/remoteproc0/state
+sleep 1
+/root/latency ipc_ddr > latency-ipc-ddr-cached.txt
+echo stop > /sys/class/remoteproc/remoteproc0/state
+sleep 1
+
+echo latency-ipc-tunnel-ocm-cached > /sys/class/remoteproc/remoteproc0/firmware
+echo start > /sys/class/remoteproc/remoteproc0/state
+sleep 1
+/root/latency ipc_ocm > latency-ipc-ocm-cached.txt
+echo stop > /sys/class/remoteproc/remoteproc0/state
+
+echo throughput-ipc-tunnel-ddr-cached > /sys/class/remoteproc/remoteproc0/firmware
+echo start > /sys/class/remoteproc/remoteproc0/state
+sleep 1
+/root/throughput ipc_ddr
+echo stop > /sys/class/remoteproc/remoteproc0/state
+sleep 1
+
+echo throughput-ipc-tunnel-ocm-cached > /sys/class/remoteproc/remoteproc0/firmware
+echo start > /sys/class/remoteproc/remoteproc0/state
+sleep 1
+/root/throughput ipc_ocm
+echo stop > /sys/class/remoteproc/remoteproc0/state
+sleep 1
+mv /root/throughput-IpcTunnelDDR.csv /root/throughput-IpcTunnelDDR-cached.csv
+mv /root/throughput-IpcTunnelOCM.csv /root/throughput-IpcTunnelOCM-cached.csv
+
+modprobe -r ipc-tunnel-cached
+
+
+sleep 1
+
+modprobe ipc-tunnel
+
+echo latency-ipc-tunnel-ddr > /sys/class/remoteproc/remoteproc0/firmware
+echo start > /sys/class/remoteproc/remoteproc0/state
+sleep 1
+/root/latency ipc_ddr > latency-ipc-ddr.txt
+echo stop > /sys/class/remoteproc/remoteproc0/state
+sleep 1
+
+echo latency-ipc-tunnel-ocm > /sys/class/remoteproc/remoteproc0/firmware
+echo start > /sys/class/remoteproc/remoteproc0/state
+sleep 1
+/root/latency ipc_ocm > latency-ipc-ocm.txt
+echo stop > /sys/class/remoteproc/remoteproc0/state
+
+echo throughput-ipc-tunnel-ddr > /sys/class/remoteproc/remoteproc0/firmware
+echo start > /sys/class/remoteproc/remoteproc0/state
+sleep 1
+/root/throughput ipc_ddr
+echo stop > /sys/class/remoteproc/remoteproc0/state
+sleep 1
+
+echo throughput-ipc-tunnel-ocm > /sys/class/remoteproc/remoteproc0/firmware
+echo start > /sys/class/remoteproc/remoteproc0/state
+sleep 1
+/root/throughput ipc_ocm
+echo stop > /sys/class/remoteproc/remoteproc0/state
+sleep 1
+
+modprobe -r ipc-tunnel
