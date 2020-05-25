@@ -2,7 +2,7 @@
 petalinux-package --boot --kernel --u-boot --force -o /vagrant/dippa_linux.bin
 
 cd G:/projects/switch/env
-exec program_flash -f dippa_linux_ipc_tunnel.bin -fsbl zynq_fsbl.elf -flash_type qspi_single -blank_check -verify -cable type xilinx_tcf url tcp:localhost:3121
+exec program_flash -f dippa_linux_ipc_tunnel_cached.bin -fsbl zynq_fsbl.elf -flash_type qspi_single -blank_check -verify -cable type xilinx_tcf url tcp:localhost:3121
 
 echo variant-ipc-tunnel-v3 > /sys/class/remoteproc/remoteproc0/firmware
 echo start > /sys/class/remoteproc/remoteproc0/state
@@ -24,21 +24,41 @@ https://github.com/NXPmicro/rpmsg-lite/
 
 RUN MAIN BENCHMARK
 
+modprobe ipc-tunnel-cached
 echo dippa-soft-ipc-tunnel-ddr-cached > /sys/class/remoteproc/remoteproc0/firmware
 echo start > /sys/class/remoteproc/remoteproc0/state
+/root/dippa_app ipc_ddr asd
+echo stop > /sys/class/remoteproc/remoteproc0/state
 
-/root/dippa_app ipc_ddr
 
+echo dippa-soft-openamp > /sys/class/remoteproc/remoteproc0/firmware
+echo start > /sys/class/remoteproc/remoteproc0/state
+/root/dippa_app amp asd
 echo stop > /sys/class/remoteproc/remoteproc0/state
 
 
 
+modprobe ipc-tunnel-cached
+echo dippa-soft-ipc-tunnel-ocm-cached-shm > /sys/class/remoteproc/remoteproc0/firmware
+echo start > /sys/class/remoteproc/remoteproc0/state
+/root/dippa_app ipc_ocm shm
+echo stop > /sys/class/remoteproc/remoteproc0/state
 
 
+echo dippa-soft-ipc-tunnel-ddr-cached-shm > /sys/class/remoteproc/remoteproc0/firmware
 
+echo dippa-soft-ipc-tunnel-ocm-shm > /sys/class/remoteproc/remoteproc0/firmware
+/root/dippa_app ipc_ocm shm
+
+
+echo dippa-soft-ipc-tunnel-ddr > /sys/class/remoteproc/remoteproc0/firmware
+echo start > /sys/class/remoteproc/remoteproc0/state
+/root/dippa_app ipc_ddr dasd
 
 RUN UNIT TESTS
 
+
+shm not cached doesn't work!
 
 
 

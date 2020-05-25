@@ -2,7 +2,6 @@
 #include <openamp/rpmsg.h>
 #include "platform_info.h"
 
-
 #define SERVICE_NAME0 "dippa-channel0"
 #define SERVICE_NAME1 "dippa-channel1"
 #define SERVICE_NAME2 "dippa-channel2"
@@ -24,7 +23,7 @@ typedef struct {
     int packetsBegin;
     int packetsEnd;
     
-    VARIANT_ReadCallback cb;
+    volatile VARIANT_ReadCallback cb;
     void* user;
     BufferedPacket packets[PACKET_BUFFER_SIZE];
 } Channel;
@@ -60,8 +59,9 @@ static int rpmsg_endpoint_cb(struct rpmsg_endpoint *ept, void *data, size_t len,
 {
     Channel* chan = (Channel*)ept->priv;
     
-    if (chan->cb) {
-        chan->cb(data, len, chan->user);
+    VARIANT_ReadCallback cb = chan->cb;
+    if (cb) {
+        cb(data, len, chan->user);
     }
     else {
         if (chan->packetsEnd != PACKET_BUFFER_SIZE) {
@@ -136,9 +136,8 @@ bool VARIANT_Initialize(void* platform)
 
 static void ReadChannel(int channelId, uint8_t* buffer, uint32_t size, VARIANT_ReadCallback cb, void* user) {
     Channel* chan = &f_chans[channelId];
-    
+
     while (chan->packetsBegin != chan->packetsEnd) {
-        xil_printf("Read buffered packet, channel %i\r\n", channelId);
         BufferedPacket* packet = &chan->packets[chan->packetsBegin];
         cb(packet->buf, packet->packetSize, user);
         
@@ -154,15 +153,11 @@ static void ReadChannel(int channelId, uint8_t* buffer, uint32_t size, VARIANT_R
         }
     }
     
-    
     chan->cb = cb;
     chan->user = user;
 
     f_packetsBuffered = 0;
-
-    // Just expect that size is enough...
-    while (platform_poll /*_noblock*/(f_platform) && f_packetsBuffered < 3) { }
-
+    platform_poll_noblock(f_platform);
     chan->cb = NULL;
 }
 
@@ -215,4 +210,14 @@ void VARIANT_Destruct(void)
     rpmsg_destroy_ept(&f_chans[0].lept);
     
     platform_release_rpmsg_vdev(rpdev);
+}
+
+uint8_t* VARIANT_T0Shm()
+{
+    return 0;
+}
+
+uint32_t VARIANT_T0ShmSize()
+{
+    return 0;
 }

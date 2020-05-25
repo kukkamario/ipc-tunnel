@@ -48,6 +48,7 @@ static void Phase0Read(uint8_t* buf, uint32_t packetSize, void* user) {
     }
     
     if (recv_data->control_flags & CONTROL_FLAG_NEXT) {
+        //xil_printf("phase 0 -> 1 packet_size: %u  packetCounter: %u  p=%u\r\n", packetSize, packetCounter, recv_data->packet_id);
         phase = 1;
         sendPacketSize = packetSize;
         totalReceiveTime = timestamp - totalReceiveTime;
@@ -72,12 +73,13 @@ static void Phase2Read(uint8_t* buf, uint32_t packetSize, void* user)
         packetCounter = 0;
         
         //xil_printf("CONTROL_FLAG_NEXT received, moving to phase=0, control_flags: %x\r\n", (uint32_t)recv_data->control_flags);
+        //xil_printf("phase 2 -> 0  p=%u\r\n", recv_data->packet_id);
         
         BaremetalToLinux* packet = (BaremetalToLinux*)buffer;
         XTime_GetTime(&packet->send_timestamp);
         packet->control_flags = CONTROL_FLAG_NEXT;
         packet->linux_to_baremetal_latency = totalReceiveTime;
-        
+        packet->packet_id = 0xFFFFFFFFu;
         totalReceiveTime = 0;
         
         while (!VARIANT_WriteChan0(buffer, sendPacketSize)) { }
@@ -100,7 +102,6 @@ static void Test(void) {
             VARIANT_ReadChan0(buffer, sizeof(buffer), &Phase0Read, NULL);
         }
         else if (phase == 1) {
-            
             BaremetalToLinux* packet = (BaremetalToLinux*)buffer;
             XTime_GetTime(&packet->send_timestamp);
             if (sendPacketCount < MAX_RECV_LATENCIES) {
@@ -114,15 +115,23 @@ static void Test(void) {
             sendPacketCount += 1;
             
             packet->control_flags = 0;
+            packet->packet_id = sendPacketCount;
             if (sendPacketCount == packetCounter) {
                 packet->control_flags |= CONTROL_FLAG_NEXT;
                 phase = 2;
+                //xil_printf("phase 1 -> 2  sendPacketCount: %u\r\n", sendPacketCount);
+                //xil_printf("All packets sent, moving to phase=2\r\n")
                 
-                //xil_printf("All packets sent, moving to phase=2\r\n");
+                /* retry send as many times as it is necessary */
+                while (!VARIANT_WriteChan0(buffer, sendPacketSize)) { }
+                //xil_printf("Sent last packet\r\n", sendPacketCount);
+            }
+            else {
+                /* retry send as many times as it is necessary */
+                while (!VARIANT_WriteChan0(buffer, sendPacketSize)) { }
             }
             
-            /* retry send as many times as it is necessary */
-            while (!VARIANT_WriteChan0(buffer, sendPacketSize)) { }
+
         }
         else if (phase == 2) {
             VARIANT_ReadChan0(buffer, sizeof(buffer), &Phase2Read, NULL);

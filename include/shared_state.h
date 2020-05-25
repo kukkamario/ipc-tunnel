@@ -7,7 +7,7 @@ extern "C" {
 #endif
 
 #define SHAREDSTATE_PACKET_LATENCY_BUF_SIZE 8
-#define SHAREDSTATE_BACKLOG 8
+#define SHAREDSTATE_BACKLOG 16
 
 #define SHAREDSTATE_VARIABLE_COUNT 16
 
@@ -41,6 +41,11 @@ typedef struct {
 	SharedState_TimeLevelStats stats;
 } SharedState_T0DataPacket;
 
+typedef struct {
+	uint64_t timestamp;
+	SharedState_TimeLevelStats stats;
+} SharedState_T0ShmDataPacket;
+
 enum SharedState_VariableType {
 	SHAREDSTATE_VAR_DOUBLE = 0,
 	SHAREDSTATE_VAR_FLOAT = 1,
@@ -73,6 +78,13 @@ typedef struct {
 	uint64_t timestamp;
 	SharedState_TimeLevelStats stats;
 } SharedState_T1DataPacket;
+
+typedef struct {
+	volatile uint32_t updateAtomicCounter;
+	uint32_t prevUpdateTime;
+	uint64_t timestamp;
+	SharedState_Variables vars;
+} SharedState_T0SharedMemory;
 
 
 typedef struct {

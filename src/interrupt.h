@@ -41,6 +41,7 @@ typedef enum {
     /* First private peripheral interrupt */
     INTERRUPT_PPI_FIRST = 27,
 
+    INTERRUPT_SCU_TIMER = XPAR_SCUTIMER_INTR,
     INTERRUPT_PPI_SCU_WDT = XPS_SCU_WDT_INT_ID,
 
     /* Last private peripheral interrupt */
@@ -58,7 +59,7 @@ typedef enum {
 
     /* Last shared peripheral interrupt */
     INTERRUPT_SPI_LAST = 91,
-
+    
     /* Invalid interrupt number that some functions accept as to signify that
      * interrupt shouldn't be used */
     INTERRUPT_INVALID = 0xFF
@@ -89,8 +90,9 @@ typedef enum {
  * --------------------------------------------------------------
  */
 
-extern void INTERRUPT_RegisterHandler(InterruptNumber_t interrupt,
-        int (*handler)(int, void*),
+extern void INTERRUPT_RegisterHandler(
+        InterruptNumber_t interrupt,
+        void (*handler)(void*),
         void* userData);
 
 extern void INTERRUPT_Enable(InterruptNumber_t interrupt);

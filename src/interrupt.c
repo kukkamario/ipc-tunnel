@@ -12,8 +12,6 @@
 #include <xscugic_hw.h>
 #include <xscutimer.h>
 
-#include <metal/irq.h>
-
 /* --------------------------------------------------------------
  * MACRO DEFINITIONS
  * --------------------------------------------------------------
@@ -23,6 +21,8 @@
  * PRIVATE VARIABLE DEFINITIONS
  * --------------------------------------------------------------
  */
+
+extern XScuGic xInterruptController;
 
 /* --------------------------------------------------------------
  * PRIVATE FUNCTION DECLARATIONS
@@ -36,52 +36,33 @@
 
 void INTERRUPT_RegisterHandler(
         InterruptNumber_t interrupt,
-        int (*handler)(int, void*),
+        void (*handler)(void*),
         void* userData)
 {
-    metal_irq_register(interrupt, handler, userData);
+    XScuGic_Connect(&xInterruptController, interrupt, handler, userData);
 }
 
 void INTERRUPT_Enable(InterruptNumber_t interrupt)
 {
-    metal_irq_enable(interrupt);
+    XScuGic_Enable(&xInterruptController, interrupt);
 }
 
 void INTERRUPT_Disable(InterruptNumber_t interrupt)
 {
-    metal_irq_disable(interrupt);
+    XScuGic_Disable(&xInterruptController, interrupt);
 }
-
-
-
 
 void INTERRUPT_SetPriorityAndTriggerType(
         InterruptNumber_t interrupt,
         InterruptPriority_t priority,
         InterruptTriggerType_t triggerType)
 {
-    XScuGic_SetPriTrigTypeByDistAddr(XPAR_SCUGIC_DIST_BASEADDR, interrupt, priority, triggerType);
+    XScuGic_SetPriorityTriggerType(&xInterruptController, interrupt, priority, triggerType);
 }
 
 void INTERRUPT_BindSPIToThisCPU(InterruptNumber_t spiInterrupt)
 {
-    /* This function should only be used with shared peripheral interrupts */
-    Xil_AssertVoid(INTERRUPT_SPI_FIRST <= spiInterrupt && spiInterrupt <= INTERRUPT_SPI_LAST);
-    
-    volatile uint32_t* spiTargetRegisterPtr = (volatile uint32_t*)(
-                XPAR_SCUGIC_DIST_BASEADDR + XSCUGIC_SPI_TARGET_OFFSET_CALC(spiInterrupt));
-    
-    u32 RegValue, Offset;
-	RegValue = *spiTargetRegisterPtr;
-
-	Offset = (spiInterrupt & 0x3U);
-	uint32_t Cpu_Id = (0x1U << XPAR_CPU_ID);
-
-	RegValue = (RegValue & (~(0xFFU << (Offset*8U))) );
-	RegValue |= ((Cpu_Id) << (Offset*8U));
-
-    xil_printf("Target offset reg %p: %x\r\n", spiTargetRegisterPtr, RegValue);
-	*spiTargetRegisterPtr = RegValue;
+    XScuGic_InterruptMaptoCpu(&xInterruptController, XPAR_CPU_ID, spiInterrupt);
 }
 
 

@@ -50,7 +50,7 @@ static void DoTest(CommInterface& comm)
         LinuxToBaremetal req;
         req.control_flags = 0;
         req.send_timestamp = global_timer::now().time_since_epoch().count();
-        comm.Send(Target::T0, reinterpret_cast<const uint8_t*>(&req), sizeof(LinuxToBaremetal));
+        while (!comm.Send(Target::T0, reinterpret_cast<const uint8_t*>(&req), sizeof(LinuxToBaremetal))) {}
 
         BaremetalToLinux resp;
         size_t respSize = comm.ReceiveT0(reinterpret_cast<uint8_t*>(&resp), sizeof(resp));
@@ -66,7 +66,7 @@ static void DoTest(CommInterface& comm)
     LinuxToBaremetal req;
     req.control_flags = CONTROL_FLAG_SHUTDOWN;
     req.send_timestamp = global_timer::now().time_since_epoch().count();
-    comm.Send(Target::T0, reinterpret_cast<const uint8_t*>(&req), sizeof(LinuxToBaremetal));
+    while (!comm.Send(Target::T0, reinterpret_cast<const uint8_t*>(&req), sizeof(LinuxToBaremetal))) {}
 
     global_timer::duration linuxToBaremetalLatency =
             std::accumulate(linuxToBaremetalLatencies.begin(), linuxToBaremetalLatencies.end(), global_timer::duration()) / ITERATION_COUNT;

@@ -15,8 +15,8 @@ static const IpcTunnelConfig_t f_configs[] = {
 
         .cpu0KickSGI = 14,
 
-        .sharedMemoryAddress = 0xFFFF2200,
-        .sharedMemorySize = 0xE00
+        .sharedMemoryAddress = 0xFFFFE000,
+        .sharedMemorySize = 0x1000
     },
     {
         .controlBlockAddress = 0xFFFF3000,
@@ -46,7 +46,7 @@ static const IpcTunnelConfig_t f_configs[] = {
         .cpu0KickSGI = 12,
 
         .sharedMemoryAddress = 0xFFFFC000,
-        .sharedMemorySize = 0x3000
+        .sharedMemorySize = 0x2000
     },
 
     {
@@ -61,8 +61,8 @@ static const IpcTunnelConfig_t f_configs[] = {
 
         .cpu0KickSGI = 11,
 
-        .sharedMemoryAddress = 0x3FFF2200,
-        .sharedMemorySize = 0xE00
+        .sharedMemoryAddress = 0x3FFFE000,
+        .sharedMemorySize = 0x1000
     },
     {
         .controlBlockAddress = 0x3FFF3000,
@@ -92,7 +92,7 @@ static const IpcTunnelConfig_t f_configs[] = {
         .cpu0KickSGI = 9,
 
         .sharedMemoryAddress = 0x3FFFC000,
-        .sharedMemorySize = 0x3000
+        .sharedMemorySize = 0x2000
     }
 };
 
@@ -176,6 +176,17 @@ uint32_t VARIANT_PacketSizeChan2(void)
 {
     return f_configs[2].sendPacketMaxSize;
 }
+
+uint8_t* VARIANT_T0Shm()
+{
+    return (uint8_t*)f_tunnels[0].config->sharedMemoryAddress;
+}
+
+uint32_t VARIANT_T0ShmSize()
+{
+    return f_tunnels[0].config->sharedMemorySize;
+}
+
 
 void VARIANT_Destruct(void) {
     

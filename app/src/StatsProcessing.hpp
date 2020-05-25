@@ -10,7 +10,16 @@
 
 class StatsProcessing {
 public:
-	StatsProcessing() {}
+	StatsProcessing(size_t reserve = 0) {
+		if (reserve > 0) {
+			iterationNumbers.reserve(reserve);
+			timeLevelDurations.reserve(reserve);
+			timeLevelStartTimes.reserve(reserve);
+			sentPacketLatencies.reserve(reserve);
+			sendTimes.reserve(reserve);
+			receivePacketLatencies.reserve(reserve);
+		}
+	}
 	
 	void Add(const SharedState_TimeLevelStats& stats);
 	void AddReceivePacketLatency(global_timer::duration dur);
@@ -36,8 +45,8 @@ private:
 void StatsProcessing::Add(const SharedState_TimeLevelStats &stats)
 {
 	if (stats.iterationNumber > iterationNumber) {
-		uint32_t itCount = stats.iterationNumber < iterationNumber;
-		if (itCount < SHAREDSTATE_BACKLOG) {
+		uint32_t itCount = stats.iterationNumber - iterationNumber;
+		if (itCount > SHAREDSTATE_BACKLOG) {
 			totalMissedStats += itCount - SHAREDSTATE_BACKLOG;
 			itCount = SHAREDSTATE_BACKLOG;
 		}
@@ -50,7 +59,7 @@ void StatsProcessing::Add(const SharedState_TimeLevelStats &stats)
 			prevStartTimeLow = startTimeLow;
 			
 			iterationNumbers.push_back(stats.iterationNumber - i);
-			timeLevelStartTimes.push_back(global_timer::time_point(global_timer::duration(((uint64_t)startTimeHigh << 32) + startTimeLow)));
+			timeLevelStartTimes.push_back(global_timer::time_point(global_timer::duration(((uint64_t)startTimeHigh << 32u) + startTimeLow)));
 			timeLevelDurations.push_back(stats.timeLevelDurations[i]);
 		}
 		
@@ -94,23 +103,25 @@ void StatsProcessing::WriteCSV(const std::string &fileName)
 	global_timer::duration recordDuration = timeLevelStartTimes.back() - timeLevelStartTimes.front();
 	
 	auto expectedStartTime = [&](uint32_t iteration) {
-		return timeLevelStartTimes.front() +
-		            recordDuration * iteration / timeLevelStartTimes.size();
+		return global_timer::time_point(recordDuration * iteration / iterationNumbers.back());
 	};
 	
 	out << "send_time_avg_ns\t" << std::chrono::duration_cast<std::chrono::nanoseconds>(avgSendTime).count() << '\n';
 	out << "send_time_variance_ns\t" << sendTimeVarianceNs << '\n';
+	out << "dropped_packets\t" << totalDroppedPackets << '\n';
+	out << "missed_stats\t" << totalMissedStats << '\n';
 	
-	out << "\niteration\tstart_time(ns)\texpected_start_time(ns)\tstart_time_expectation_offset(ns)\tduration(ns)";
+	out << "\niteration\tstart_time(ns)\texpected_start_time(ns)\tstart_time_expectation_offset(ns)\tduration(ns)\n";
 	
 	for (size_t i = 0; i < iterationNumbers.size(); ++i) {
-		auto startTimeNs= std::chrono::duration_cast<std::chrono::nanoseconds>(timeLevelStartTimes[i].time_since_epoch());
+		auto startTimeNs= std::chrono::duration_cast<std::chrono::nanoseconds>(timeLevelStartTimes[i] - timeLevelStartTimes.front());
 		auto expectedStartTimeNs = std::chrono::duration_cast<std::chrono::nanoseconds>(expectedStartTime(iterationNumbers[i]).time_since_epoch());
 		out << iterationNumbers[i] << '\t'
 		    << startTimeNs.count() << '\t'
 		    << expectedStartTimeNs.count() << '\t'
 		    << (startTimeNs - expectedStartTimeNs).count() << '\t'
-		    << std::chrono::duration_cast<std::chrono::nanoseconds>(global_timer::duration(timeLevelDurations[i])).count();
+		    << std::chrono::duration_cast<std::chrono::nanoseconds>(global_timer::duration(timeLevelDurations[i])).count()
+		    << '\n';
 	}
 	
 	

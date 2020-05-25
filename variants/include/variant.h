@@ -10,6 +10,9 @@ void VARIANT_Destruct(void);
 
 typedef void (*VARIANT_ReadCallback)(uint8_t* buf, uint32_t size, void* user);
 
+uint8_t* VARIANT_T0Shm(void);
+uint32_t VARIANT_T0ShmSize(void);
+
 void VARIANT_ReadChan0(uint8_t* buffer, uint32_t size, VARIANT_ReadCallback cb, void* user);
 void VARIANT_ReadChan1(uint8_t* buffer, uint32_t size, VARIANT_ReadCallback cb, void* user);
 void VARIANT_ReadChan2(uint8_t* buffer, uint32_t size, VARIANT_ReadCallback cb, void* user);

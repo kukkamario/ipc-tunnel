@@ -38,7 +38,11 @@ set(MAIN_SRCS
 set(variants openamp ipc-tunnel-ocm ipc-tunnel-ddr ipc-tunnel-ocm-cached ipc-tunnel-ddr-cached)
 
 foreach(var ${variants})
-	add_executable(dippa-soft-${var} ${MAIN_SRCS})
+	add_executable(dippa-soft-${var} ${MAIN_SRCS} src/application.c)
 	target_include_directories(dippa-soft-${var} PRIVATE include)
 	target_link_libraries(dippa-soft-${var} PRIVATE openamp_support bsp variant-${var})
+	
+	add_executable(dippa-soft-${var}-shm ${MAIN_SRCS} src/application_shm.c)
+	target_include_directories(dippa-soft-${var}-shm PRIVATE include)
+	target_link_libraries(dippa-soft-${var}-shm PRIVATE openamp_support bsp variant-${var})
 endforeach()

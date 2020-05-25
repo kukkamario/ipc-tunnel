@@ -172,7 +172,7 @@ bool OpenAMPComm::Initialize(bool blockT0)
         return false;
     }
 
-    return InitDev(0, blockT0) && InitDev(1, false) && InitDev(2, false);
+    return InitDev(0, blockT0);  // && InitDev(1, false) && InitDev(2, false);
 }
 
 bool OpenAMPComm::Send(Target t, const uint8_t* data, size_t size)
@@ -202,6 +202,30 @@ size_t OpenAMPComm::ReceiveT0(uint8_t* data, size_t bufSize)
     return ret;
 }
 
+void OpenAMPComm::ReceiveAny(uint8_t* buf, size_t size, const std::function<void (Target, const uint8_t*, size_t)>& receiveCb)
+{
+    fd_set fd_set_t1t2;
+    FD_ZERO(&fd_set_t1t2);
+    FD_SET(fds[1], &fd_set_t1t2);
+    FD_SET(fds[2], &fd_set_t1t2);
+    
+    int readyFds = select(fds[2] + 1, &fd_set_t1t2, 0, 0, 0);
+    if (readyFds > 0) {
+        if (FD_ISSET(fds[1], &fd_set_t1t2)) {
+            ssize_t readBytes = read(fds[1], buf, size);
+            if (readBytes > 0) {
+                receiveCb(Target::T1, buf, readBytes);
+            }
+        }
+        if (FD_ISSET(fds[2], &fd_set_t1t2)) {
+            ssize_t readBytes = read(fds[2], buf, size);
+            if (readBytes > 0) {
+                receiveCb(Target::T2, buf, readBytes);
+            }
+        }
+    }
+}
+
 void OpenAMPComm::ReceiveT1OrT2(uint8_t* buf, size_t size, const std::function<void (Target, const uint8_t*, size_t)>& receiveCb)
 {
     fd_set fd_set_t1t2;
@@ -209,7 +233,7 @@ void OpenAMPComm::ReceiveT1OrT2(uint8_t* buf, size_t size, const std::function<v
     FD_SET(fds[1], &fd_set_t1t2);
     FD_SET(fds[2], &fd_set_t1t2);
     
-    int readyFds = select(2, &fd_set_t1t2, 0, 0, 0);
+    int readyFds = select(fds[2] + 1, &fd_set_t1t2, 0, 0, 0);
     if (readyFds > 0) {
         if (FD_ISSET(fds[1], &fd_set_t1t2)) {
             ssize_t readBytes = read(fds[1], buf, size);
@@ -230,6 +254,11 @@ uint16_t OpenAMPComm::GetMaxPacketSize(Target t) const
 {
     (void)t;
     return 496;
+}
+
+uint8_t* OpenAMPComm::MapT0SharedMemory()
+{
+    return nullptr;
 }
 
 bool OpenAMPComm::InitDev(int i, bool block)

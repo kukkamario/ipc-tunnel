@@ -14,4 +14,6 @@ typedef struct {
 
 void SCHEDULER_Init(const SchedulerConfig_t* conf);
 
+void SCHEDULER_Stop(void);
+
 #endif   // WORKLOAD_SCHEDULER_H_

@@ -10,7 +10,7 @@
 
 #include "variant.h"
 #include "scheduler.h"
-#include "workload.h"
+#include "application.h"
 
 #define LPRINTF(format, ...) xil_printf(format, ##__VA_ARGS__)
 //#define LPRINTF(format, ...)
@@ -18,14 +18,15 @@
 
 static uint64_t totalReceiveTime = 0;
 
+
 static const SchedulerConfig_t f_schedulerConfig = {
     .t0Frequency = 20000,
     .t1Multiplier = 4,
     .t2Multiplier = 20,
     
-    .t0Task = &WORKLOAD_T0,
-    .t1Task = &WORKLOAD_T1,
-    .t2Task = &WORKLOAD_T2
+    .t0Task = &APPLICATION_T0,
+    .t1Task = &APPLICATION_T1,
+    .t2Task = &APPLICATION_T2
 };
 
 static uint8_t f_packetBuffer[0x1000];
@@ -37,7 +38,7 @@ static void HandleInitialPacket(uint8_t* buf, uint32_t size, void* user)
 }
 
 static void Execute(void) {
-    WORKLOAD_Init();
+    if (!APPLICATION_Init()) return;
     
     xil_printf("Waiting start packet\r\n");
     
@@ -49,10 +50,15 @@ static void Execute(void) {
     
     SCHEDULER_Init(&f_schedulerConfig);
     Xil_ExceptionEnable();
+    xil_printf("Enabled exceptions\r\n");
     
-    while(1) {
-        WORKLOAD_BG();
+    while(APPLICATION_Running()) {
+        APPLICATION_BG();
     }
+    
+    
+    xil_printf("Stopping scheduler\r\n");
+    SCHEDULER_Stop();
 }
 
 /*-----------------------------------------------------------------------------*

@@ -19,7 +19,7 @@
 
 #define INTC_DEVICE_ID		XPAR_SCUGIC_0_DEVICE_ID
 
-static XScuGic xInterruptController;
+XScuGic xInterruptController;
 
 /* Interrupt Controller setup */
 static int app_gic_initialize(void)

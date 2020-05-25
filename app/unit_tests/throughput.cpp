@@ -32,7 +32,7 @@ int main(int argc, char *argv[])
 static constexpr unsigned ITERATION_COUNT = 10000;
 static constexpr unsigned REPEAT_COUNT = 10;
 
-static std::array<uint16_t, 8> f_testedPacketSizes{32, 64, 128, 256, 496, 512, 1024, 2048};
+static uint16_t f_testedPacketSizes[] = {32, 64, 128, 256, 496 , 512, 1024, 2048};
 static std::array<std::array<global_timer::duration, ITERATION_COUNT>, REPEAT_COUNT> linuxToBaremetalLatencies;
 static std::array<std::array<global_timer::duration, ITERATION_COUNT>, REPEAT_COUNT> baremetalToLinuxLatencies;
 
@@ -67,17 +67,18 @@ static void DoTest(CommInterface& comm)
         
         for (unsigned r = 0; r < REPEAT_COUNT; ++r) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            //std::cout << "Starting phase=0" << std::endl;
+            //std::cout << "App phase=0" << std::endl;
             {  // phase = 0
                 LinuxToBaremetal* req = reinterpret_cast<LinuxToBaremetal*>(f_buffer);
                 for (unsigned i = 0; i < ITERATION_COUNT; ++i) {
                     req->control_flags = (i + 1 == ITERATION_COUNT) ? CONTROL_FLAG_NEXT : 0;
                     req->send_timestamp = global_timer::now().time_since_epoch().count();
+                    req->packet_id = i;
                     
-                    comm.Send(Target::T0, f_buffer, packetSize);
+                    while (!comm.Send(Target::T0, f_buffer, packetSize)) {}
                 }
             }
-            //std::cout << "Starting phase=1" << std::endl;
+            //std::cout << "App phase=1" << std::endl;
             {  // phase = 1
                 global_timer::time_point firstPacketReceiveTime{};
                 global_timer::time_point receive_time;
@@ -92,18 +93,20 @@ static void DoTest(CommInterface& comm)
                     baremetalToLinuxLatencies[r][i] = receive_time
                             - global_timer::time_point(global_timer::duration(resp->send_timestamp));
                 }
-                
                 baremetalToLinuxReceiveTime[r] = receive_time - firstPacketReceiveTime;
             }
-            //std::cout << "Starting phase=2" << std::endl;
+            BaremetalToLinux* resp = reinterpret_cast<BaremetalToLinux*>(f_buffer);
+            //std::cout << "App phase=2. End pid=" << resp->packet_id << std::endl;
             {  // phase = 2
                 LinuxToBaremetal req;
                 req.control_flags = CONTROL_FLAG_NEXT;
                 req.send_timestamp = global_timer::now().time_since_epoch().count();
-                comm.Send(Target::T0, reinterpret_cast<const uint8_t*>(&req), sizeof(LinuxToBaremetal));
+                req.packet_id = 0xFFFFFFFF;
+                while (!comm.Send(Target::T0, reinterpret_cast<const uint8_t*>(&req), sizeof(LinuxToBaremetal))) {}
                 
                 size_t respSize = comm.ReceiveT0(f_buffer, sizeof(f_buffer));
                 BaremetalToLinux* resp = reinterpret_cast<BaremetalToLinux*>(f_buffer);
+                //std::cout << "App phase to 0: pid=" << resp->packet_id << std::endl;
                 
                 linuxToBaremetalReceiveTime[r] = global_timer::duration(resp->linux_to_baremetal_latency);
                 

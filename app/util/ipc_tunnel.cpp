@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <unistd.h>
 
+static constexpr size_t T0_SHM_SIZE = 0x1000;
+
 IpcTunnel::IpcTunnel(IpcTunnel::Memory mem) :
     mem(mem)
 {
@@ -13,6 +15,10 @@ IpcTunnel::IpcTunnel(IpcTunnel::Memory mem) :
 
 IpcTunnel::~IpcTunnel()
 {
+    if (shm) {
+        munmap(shm, T0_SHM_SIZE);
+    }
+    
     for (int i = 0; i < 3; ++i) {
         if (fds[i] > 0) {
             close(fds[i]);
@@ -36,6 +42,8 @@ bool IpcTunnel::Initialize(bool blockT0)
         devIndex += 1;
     }
     
+    nfds = (fds[1] > fds[2] ? fds[1] : fds[2]) + 1;
+    
     return fds[0] > 0 && fds[1] > 0 && fds[2] > 0;
 }
 
@@ -54,22 +62,53 @@ size_t IpcTunnel::ReceiveT0(uint8_t* data, size_t bufSize)
     return 0;
 }
 
-void IpcTunnel::ReceiveT1OrT2(uint8_t* buf, size_t size, const std::function<void(Target, const uint8_t*, size_t)>& receiveCb)
+void IpcTunnel::ReceiveAny(uint8_t *buf, size_t size, const std::function<void (Target, const uint8_t *, size_t)> &receiveCb)
 {
-    fd_set fd_set_t1t2;
-    FD_ZERO(&fd_set_t1t2);
-    FD_SET(fds[1], &fd_set_t1t2);
-    FD_SET(fds[2], &fd_set_t1t2);
+    fd_set read_fds;
+    FD_ZERO(&read_fds);
+    FD_SET(fds[0], &read_fds);
+    FD_SET(fds[1], &read_fds);
+    FD_SET(fds[2], &read_fds);
     
-    int readyFds = select(2, &fd_set_t1t2, 0, 0, 0);
+    int readyFds = select(nfds, &read_fds, 0, 0, 0);
     if (readyFds > 0) {
-        if (FD_ISSET(fds[1], &fd_set_t1t2)) {
+        if (FD_ISSET(fds[0], &read_fds)) {
+            ssize_t readBytes = read(fds[0], buf, size);
+            if (readBytes > 0) {
+                receiveCb(Target::T0, buf, readBytes);
+            }
+        }
+        if (FD_ISSET(fds[1], &read_fds)) {
             ssize_t readBytes = read(fds[1], buf, size);
             if (readBytes > 0) {
                 receiveCb(Target::T1, buf, readBytes);
             }
         }
-        if (FD_ISSET(fds[2], &fd_set_t1t2)) {
+        if (FD_ISSET(fds[2], &read_fds)) {
+            ssize_t readBytes = read(fds[2], buf, size);
+            if (readBytes > 0) {
+                receiveCb(Target::T2, buf, readBytes);
+            }
+        }
+    }
+}
+
+void IpcTunnel::ReceiveT1OrT2(uint8_t* buf, size_t size, const std::function<void(Target, const uint8_t*, size_t)>& receiveCb)
+{
+    fd_set read_fds;
+    FD_ZERO(&read_fds);
+    FD_SET(fds[1], &read_fds);
+    FD_SET(fds[2], &read_fds);
+    
+    int readyFds = select(nfds, &read_fds, 0, 0, 0);
+    if (readyFds > 0) {
+        if (FD_ISSET(fds[1], &read_fds)) {
+            ssize_t readBytes = read(fds[1], buf, size);
+            if (readBytes > 0) {
+                receiveCb(Target::T1, buf, readBytes);
+            }
+        }
+        if (FD_ISSET(fds[2], &read_fds)) {
             ssize_t readBytes = read(fds[2], buf, size);
             if (readBytes > 0) {
                 receiveCb(Target::T2, buf, readBytes);
@@ -80,7 +119,21 @@ void IpcTunnel::ReceiveT1OrT2(uint8_t* buf, size_t size, const std::function<voi
 
 uint16_t IpcTunnel::GetMaxPacketSize(Target t) const
 {
-    static constexpr uint16_t sizes[3] = { 0x780, 0x1200, 0x780 };
+    static constexpr uint16_t sizes[3] = { 0x780, 0x780, 0x1200 };
     
     return sizes[(int)t];
+}
+
+uint8_t *IpcTunnel::MapT0SharedMemory()
+{
+    if (shm) return shm;
+    
+    uint8_t* ptr = (uint8_t*)mmap(0, T0_SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fds[0], 0);
+    if (ptr == MAP_FAILED) {
+        perror("mmap failed");
+        return nullptr;
+    }
+    
+    shm = ptr;
+    return shm;
 }
