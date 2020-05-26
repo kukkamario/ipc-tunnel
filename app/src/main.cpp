@@ -7,6 +7,7 @@
 #include "StatsProcessing.hpp"
 #include "t0dataprocess.hpp"
 #include <atomic>
+#include <cmath>
 
 #define ITERATION_LIMIT (20000 * 10)  // ~10s
 
@@ -21,7 +22,32 @@ static void T0Thread(CommInterface& comm);
 static void T0ThreadShm(CommInterface& comm);
 
 static bool f_useShm = false;
-static std::string f_shmNameSuffix;
+static std::string f_nameSuffix;
+
+static bool f_withWorkload = false;
+
+static void Workload() {
+    static volatile double s_workStuff = 1.0;
+    
+    double var = s_workStuff;
+    for (int i = 0; i < 1500; ++i) {
+        var += 123.0;
+        
+
+        if (var > 1512436.0) {
+            var = 123.0 - i;
+        }
+        
+        var = std::cos(var) * 0.65 * s_workStuff;
+    }
+    
+    if (var > -32165132.0 && var < 1234239051597.0) {
+        s_workStuff = var;
+    }
+    else {
+        s_workStuff = 634.0;
+    }
+}
 
 int main(int argc, char *argv[])
 {
@@ -29,10 +55,16 @@ int main(int argc, char *argv[])
         std::cerr << "Expecting 2 parameters";
     }
     
-    if (strcmp(argv[2], "shm") == 0) {
+    if (strcmp(argv[2], "shm") == 0 || strcmp(argv[2], "shm_w") == 0) {
         f_useShm = true;
-        f_shmNameSuffix = "-shm";
+        f_nameSuffix = "-shm";
         std::cerr << "Transferring T0 variable data using shared memory" << std::endl;
+    }
+    
+    if (strcmp(argv[2], "shm_w") == 0 || strcmp(argv[2], "w") == 0) {
+        f_withWorkload = true;
+        f_nameSuffix += "-work";
+        std::cerr << "Running workload between T0 cycles" << std::endl;
     }
     
     auto comm = CreateFromArgs(argc, argv);
@@ -64,20 +96,20 @@ int main(int argc, char *argv[])
         t0Thread.join();
     }
 
-    t0Stats.WriteCSV("benchmark-main-" + comm->GetInterfaceName() + f_shmNameSuffix + "-t0.csv");
-    t1Stats.WriteCSV("benchmark-main-" + comm->GetInterfaceName() + f_shmNameSuffix + "-t1.csv");
-    t2Stats.WriteCSV("benchmark-main-" + comm->GetInterfaceName() + f_shmNameSuffix + "-t2.csv");
+    t0Stats.WriteCSV("benchmark-main-" + comm->GetInterfaceName() + f_nameSuffix + "-t0.csv");
+    t1Stats.WriteCSV("benchmark-main-" + comm->GetInterfaceName() + f_nameSuffix + "-t1.csv");
+    t2Stats.WriteCSV("benchmark-main-" + comm->GetInterfaceName() + f_nameSuffix + "-t2.csv");
     return 0;
 }
 
 static void T0Thread(CommInterface& comm) {
-    T0DataProcess t0DataProcess(comm);
+    T0DataProcess t0DataProcess(comm, ITERATION_LIMIT * 10ull / 9);
     uint8_t buf[0x1500];
     
     // Send start packet so the actual scheduling starts.
     // This is to avoid baremetal side filling ring buffers and dropping packets before
     // Linux side starts
-    comm.Send(Target::T0, buf, 1);
+    while (!comm.Send(Target::T0, buf, 1)) {}
     
     for (int i = 0; i < ITERATION_LIMIT; ++i) {
         size_t receivedBytes = comm.ReceiveT0(buf, sizeof(buf));
@@ -89,43 +121,47 @@ static void T0Thread(CommInterface& comm) {
         t0Stats.AddReceivePacketLatency(receiveTime - sendTime);
         t0Stats.Add(packet->stats);
         
+        auto workStart = global_timer::now();
+        if (f_withWorkload) Workload();
         if (i & 1) t0DataProcess.SendRandomVariableUpdate();
+        auto workEnd = global_timer::now();
+        t0DataProcess.AddWorkDuration(workEnd - workStart);
     }
     
     f_running = false;
     std::cerr << "T0 thread finished. Writing results" << std::endl;
-    t0DataProcess.WriteCSV("benchmark-main-" + comm.GetInterfaceName() + f_shmNameSuffix + "-variable-update.csv");
+    t0DataProcess.WriteCSV("benchmark-main-" + comm.GetInterfaceName() + f_nameSuffix + "-variable-update.csv");
 
     t0DataProcess.SendShutdownCommand();
 }
 
 static void T0ThreadShm(CommInterface& comm) {
-    T0DataProcess t0DataProcess(comm);
+    T0DataProcess t0DataProcess(comm, ITERATION_LIMIT * 10ull / 9);
     
     
     uint8_t dummyPacket;
     // Send start packet so the actual scheduling starts.
     // This is to avoid baremetal side filling ring buffers and dropping packets before
     // Linux side starts
-    comm.Send(Target::T0, &dummyPacket, 1);
-    
-    using sleep_clock = std::chrono::high_resolution_clock;
-    
+    while (!comm.Send(Target::T0, &dummyPacket, 1)) {}
+
     for (int i = 0; i < ITERATION_LIMIT; ++i) {
         
         while (!t0DataProcess.UpdateVariablesFromShm()) {
             // Polling shared memory
         }
-        auto t0EndTime = sleep_clock::now();
+        auto workStart = global_timer::now();
 
+        if (f_withWorkload) Workload();
         if (i & 1) t0DataProcess.SendRandomVariableUpdate();
         
-        //std::this_thread::sleep_until(t0EndTime + std::chrono::nanoseconds(30000));
+        auto workEnd = global_timer::now();
+        t0DataProcess.AddWorkDuration(workEnd - workStart);
     }
     
     f_running = false;
     std::cerr << "T0 thread finished. Writing results" << std::endl;
-    t0DataProcess.WriteCSV("benchmark-main-" + comm.GetInterfaceName() + f_shmNameSuffix + "-variable-update.csv");
+    t0DataProcess.WriteCSV("benchmark-main-" + comm.GetInterfaceName() + f_nameSuffix + "-variable-update.csv");
 
     t0DataProcess.SendShutdownCommand();
 }

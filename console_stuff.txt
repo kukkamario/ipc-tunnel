@@ -27,9 +27,12 @@ RUN MAIN BENCHMARK
 modprobe ipc-tunnel-cached
 echo dippa-soft-ipc-tunnel-ddr-cached > /sys/class/remoteproc/remoteproc0/firmware
 echo start > /sys/class/remoteproc/remoteproc0/state
-/root/dippa_app ipc_ddr asd
+/root/dippa_app ipc_ddr w
 echo stop > /sys/class/remoteproc/remoteproc0/state
-
+mv benchmark-main-IpcTunnelDDR-work-t0.csv benchmark-main-IpcTunnelDDR-cached-work-t0.csv
+mv benchmark-main-IpcTunnelDDR-work-t1.csv benchmark-main-IpcTunnelDDR-cached-work-t1.csv
+mv benchmark-main-IpcTunnelDDR-work-t2.csv benchmark-main-IpcTunnelDDR-cached-work-t2.csv
+mv benchmark-main-IpcTunnelDDR-work-variable-update.csv benchmark-main-IpcTunnelDDR-work-variable-update.csv
 
 echo dippa-soft-openamp > /sys/class/remoteproc/remoteproc0/firmware
 echo start > /sys/class/remoteproc/remoteproc0/state

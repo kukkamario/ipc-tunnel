@@ -9,8 +9,19 @@
 
 class T0DataProcess {
 public:
-	T0DataProcess(CommInterface& comm) : comm(comm) {
+	T0DataProcess(CommInterface& comm, size_t reserve = 0) : comm(comm) {
 		shm = (SharedState_T0SharedMemory*)comm.MapT0SharedMemory();
+        
+        if (reserve > 0) {
+            varUpdateDelaysBuf.reserve(reserve);
+            workDurations.reserve(reserve);
+            if (shm) {
+                shmUpdateTimes.reserve(reserve);
+                shmVarDataDelays.reserve(reserve);
+                shmUpdateTimesLinux.reserve(reserve);
+            }
+            
+        }
 	}
 	
 	bool HasShm() const { return shm != nullptr; }
@@ -18,6 +29,7 @@ public:
 	bool UpdateVariablesFromShm();
 	
 	void HandleNewVariableData(const SharedState_Variables& vars);
+    void AddWorkDuration(global_timer::duration d) { workDurations.push_back(d.count()); }
 	
 	void SendRandomVariableUpdate();
 	
@@ -40,8 +52,9 @@ private:
     std::vector<uint32_t> shmUpdateTimes;
     std::vector<uint32_t> shmVarDataDelays;
     std::vector<uint32_t> shmUpdateTimesLinux;
+    std::vector<uint32_t> workDurations;
 	
-	SharedState_T0SharedMemory* shm = nullptr;
+	volatile SharedState_T0SharedMemory* shm = nullptr;
 	uint32_t handledPacketId = 0;
 	
 	uint32_t packetIdCounter = 1;
@@ -65,8 +78,12 @@ bool T0DataProcess::UpdateVariablesFromShm()
     auto updateStart = global_timer::now();
     uint32_t startVal;
     do {
+#ifdef IPC_TUNNEL_CACHED
         while(((startVal = __atomic_load_n(&shm->updateAtomicCounter, __ATOMIC_ACQUIRE)) & 1) == 1) { }
-        
+#else
+        while(((startVal = shm->updateAtomicCounter) & 1) == 1) {}
+        __atomic_thread_fence(__ATOMIC_ACQUIRE);
+#endif
         /* No new values */
         if (startVal == shmPrevCounter) return false;
         
@@ -75,7 +92,13 @@ bool T0DataProcess::UpdateVariablesFromShm()
         prevUpdateTime = shm->prevUpdateTime;
         
         // Verify that synchronization variable hasn't changed during the copying
+
+#ifdef IPC_TUNNEL_CACHED
     } while ( __atomic_load_n(&shm->updateAtomicCounter, __ATOMIC_ACQUIRE) != startVal);
+#else
+        __atomic_thread_fence(__ATOMIC_RELEASE);
+    } while ( shm->updateAtomicCounter != startVal);
+#endif
     
     shmPrevCounter = startVal;
     auto updateEnd = global_timer::now();
@@ -153,7 +176,6 @@ void T0DataProcess::SendRandomVariableUpdate()
 	if (!comm.Send(Target::T0, sendPacketBuffer.data(), sendPacketSize)) {
 		// Can't send packet? Buffer is likely full
 		++delayedPacketCounter;
-		std::cerr << "Delayed T0 packet" << std::endl;
 	}
 	else {
 		sendPacketSize = 0;
@@ -167,7 +189,7 @@ void T0DataProcess::WriteCSV(const std::string &fileName)
     bool shmInUse = shmUpdateTimes.size() > 0;
     
 	out << "delayed_packets\t" << delayedPacketCounter << "\n\n";
-	out << "i\tcommand_send_delay(ns)\taction_result_delay(ns)";
+	out << "i\tcommand_send_delay(ns)\taction_result_delay(ns)\twork_duration(ns)\t";
     
     if (shmInUse) {
         out << "\tshm_copy_time_baremetal(ns)\tshm_block_time_linux\tvar_data_delay(ns)";
@@ -175,38 +197,35 @@ void T0DataProcess::WriteCSV(const std::string &fileName)
     out << '\n';
     
     size_t resultMaxCount = std::max(varUpdateDelaysBuf.size(), shmVarDataDelays.size());
+    resultMaxCount = std::max(resultMaxCount, workDurations.size());
     
     
 	for (size_t i = 0; i < resultMaxCount; ++i) {
 		out << i << '\t';
         if (i < varUpdateDelaysBuf.size()) {
             out << std::chrono::duration_cast<std::chrono::nanoseconds>(global_timer::duration(varUpdateDelaysBuf[i])).count() << '\t'
-                << std::chrono::duration_cast<std::chrono::nanoseconds>(global_timer::duration(varUpdateSeenDelayBuf[i])).count() << '\t';
+                << std::chrono::duration_cast<std::chrono::nanoseconds>(global_timer::duration(varUpdateSeenDelayBuf[i])).count();
         }
-        else {
-            out << "\t\t";
+        out << "\t";
+        
+        if (i < workDurations.size()) {
+            out << std::chrono::duration_cast<std::chrono::nanoseconds>(global_timer::duration(workDurations[i])).count();
         }
+        out << '\t';
         
         if (shmInUse) {
             if (i < shmUpdateTimes.size()) {
-                out << std::chrono::duration_cast<std::chrono::nanoseconds>(global_timer::duration(shmUpdateTimes[i])).count() << '\t';
+                out << std::chrono::duration_cast<std::chrono::nanoseconds>(global_timer::duration(shmUpdateTimes[i])).count();
             }
-            else {
-                out << '\t';
-            }
+            out << '\t';
             
             if (i < shmUpdateTimesLinux.size()) {
-                out << std::chrono::duration_cast<std::chrono::nanoseconds>(global_timer::duration(shmUpdateTimesLinux[i])).count() << '\t';
+                out << std::chrono::duration_cast<std::chrono::nanoseconds>(global_timer::duration(shmUpdateTimesLinux[i])).count();
             }
-            else {
-                out << '\t';
-            }
+            out << '\t';
             
             if (i < shmVarDataDelays.size()) {
-                out << std::chrono::duration_cast<std::chrono::nanoseconds>(global_timer::duration(shmVarDataDelays[i])).count() << '\t';
-            }
-            else {
-                out << '\t';
+                out << std::chrono::duration_cast<std::chrono::nanoseconds>(global_timer::duration(shmVarDataDelays[i])).count();
             }
         }
         out << '\n';

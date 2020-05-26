@@ -6,7 +6,7 @@
 #include <string.h>
 #include <math.h>
 #include <xil_printf.h>
-
+#include <xpseudo_asm_gcc.h>
 #include "variant.h"
 #include "shared_state.h"
 
@@ -115,6 +115,14 @@ static bool f_t0InitDone = false;
 static unsigned f_t0PacketSendCounter = 0;
 static uint32_t f_prevShmCopyTime = 0;
 
+#ifdef IPC_TUNNEL_CACHED
+#define ATOMIC_INCREASE_COUNTER1 __atomic_fetch_add(&f_shm->updateAtomicCounter, 1, __ATOMIC_ACQUIRE)
+#define ATOMIC_INCREASE_COUNTER2 __atomic_fetch_add(&f_shm->updateAtomicCounter, 1, __ATOMIC_RELEASE)
+#else
+#define ATOMIC_INCREASE_COUNTER1 ++f_shm->updateAtomicCounter; dmb()
+#define ATOMIC_INCREASE_COUNTER2 dmb(); ++f_shm->updateAtomicCounter;
+#endif
+
 void APPLICATION_T0(void)
 {
     s_t0StartTime = GlobalTimer();
@@ -133,11 +141,11 @@ void APPLICATION_T0(void)
         s_t0Packet.stats.timeLevelStartTimes[0] = s_t0StartTime;
 
         uint64_t shmUpdateStart = GlobalTimer();
-        __atomic_fetch_add(&f_shm->updateAtomicCounter, 1, __ATOMIC_ACQ_REL);
+        ATOMIC_INCREASE_COUNTER1;
         f_shm->timestamp = shmUpdateStart;
         f_shm->prevUpdateTime = f_prevShmCopyTime;
         f_shm->vars = s_variables;
-        __atomic_fetch_add(&f_shm->updateAtomicCounter, 1, __ATOMIC_RELEASE);
+        ATOMIC_INCREASE_COUNTER2;
         uint64_t endTime = GlobalTimer();
 
         f_prevShmCopyTime = endTime - shmUpdateStart;

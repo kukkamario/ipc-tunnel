@@ -20,6 +20,7 @@ BaremetalToLinux reply;
 static uint8_t buffer[1024]  __attribute__ ((aligned (16)));
 
 static bool running = true;
+unsigned f_step = 0;
 
 void ReadCallback(uint8_t* buf, uint32_t packetSize, void* user)
 {
@@ -35,9 +36,12 @@ void ReadCallback(uint8_t* buf, uint32_t packetSize, void* user)
             LPERROR("Shutdown request\r\n");
             running = false;
         }
+        else if (recv_data->control_flags & CONTROL_FLAG_NEXT) {
+            ++f_step;
+        }
         else {
-            /* Wait a moment to allow linux app to invoke read to get the best possible latency */
-            usleep(10000);
+            /* Wait a while cause Linux side to switch task */
+            if ((f_step & 1) == 0) usleep(10000);
     
             XTime_GetTime(&reply.send_timestamp);
             if (!VARIANT_WriteChan0((const uint8_t*)&reply, sizeof(reply))) {
