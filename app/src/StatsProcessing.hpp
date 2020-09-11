@@ -6,7 +6,7 @@
 #include <vector>
 #include <fstream>
 #include <numeric>
-
+#include <iostream>
 
 class StatsProcessing {
 public:
@@ -83,6 +83,7 @@ void StatsProcessing::AddReceivePacketLatency(global_timer::duration dur)
 void StatsProcessing::WriteCSV(const std::string &fileName)
 {
 	std::ofstream out(fileName);
+    std::cout << "Writing CSV " << fileName << std::endl;
 	
 	global_timer::duration avgSendTime = std::accumulate(
 	            sendTimes.begin(),
@@ -140,6 +141,8 @@ void StatsProcessing::WriteCSV(const std::string &fileName)
 		}
 		out << '\n';
 	}
+    
+    std::cout << "Written " << (6 + iterationNumbers.size() + 4 + latencyCountMax) << " lines" << std::endl;
 }
 
 

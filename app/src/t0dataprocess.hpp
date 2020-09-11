@@ -14,6 +14,7 @@ public:
         
         if (reserve > 0) {
             varUpdateDelaysBuf.reserve(reserve);
+            varUpdateSeenDelayBuf.reserve(reserve);
             workDurations.reserve(reserve);
             if (shm) {
                 shmUpdateTimes.reserve(reserve);
@@ -54,7 +55,7 @@ private:
     std::vector<uint32_t> shmUpdateTimesLinux;
     std::vector<uint32_t> workDurations;
 	
-	volatile SharedState_T0SharedMemory* shm = nullptr;
+	SharedState_T0SharedMemory* shm = nullptr;
 	uint32_t handledPacketId = 0;
 	
 	uint32_t packetIdCounter = 1;
@@ -185,6 +186,7 @@ void T0DataProcess::SendRandomVariableUpdate()
 void T0DataProcess::WriteCSV(const std::string &fileName)
 {
 	std::ofstream out(fileName);
+    std::cout << "Writing CSV " << fileName << std::endl;
 	
     bool shmInUse = shmUpdateTimes.size() > 0;
     
@@ -205,6 +207,9 @@ void T0DataProcess::WriteCSV(const std::string &fileName)
         if (i < varUpdateDelaysBuf.size()) {
             out << std::chrono::duration_cast<std::chrono::nanoseconds>(global_timer::duration(varUpdateDelaysBuf[i])).count() << '\t'
                 << std::chrono::duration_cast<std::chrono::nanoseconds>(global_timer::duration(varUpdateSeenDelayBuf[i])).count();
+        }
+        else {
+            out << '\t';
         }
         out << "\t";
         
@@ -230,6 +235,8 @@ void T0DataProcess::WriteCSV(const std::string &fileName)
         }
         out << '\n';
     }
+    
+    std::cout << "Written " << (resultMaxCount + 1) << " lines" << std::endl;
 }
 
 void T0DataProcess::SendShutdownCommand()

@@ -15,38 +15,37 @@
 //#define LPRINTF(format, ...)
 #define LPERROR(format, ...) LPRINTF("ERROR: " format, ##__VA_ARGS__)
 
-BaremetalToLinux reply;
+static uint8_t replyBuffer[2048] __attribute__ ((aligned (16)));
+static BaremetalToLinux* const reply = (BaremetalToLinux*)&replyBuffer;
 
-static uint8_t buffer[1024]  __attribute__ ((aligned (16)));
+static uint8_t buffer[2048]  __attribute__ ((aligned (16)));
 
 static bool running = true;
 unsigned f_step = 0;
 
 void ReadCallback(uint8_t* buf, uint32_t packetSize, void* user)
 {
-    if (packetSize == sizeof(LinuxToBaremetal)) {
-        uint64_t timestamp;
-        XTime_GetTime(&timestamp);
-        
-        LinuxToBaremetal* recv_data = (LinuxToBaremetal*)buf;
+    uint64_t timestamp;
+    XTime_GetTime(&timestamp);
     
-        reply.linux_to_baremetal_latency = timestamp - recv_data->send_timestamp;
-        
-        if (recv_data->control_flags & CONTROL_FLAG_SHUTDOWN) {
-            LPERROR("Shutdown request\r\n");
-            running = false;
-        }
-        else if (recv_data->control_flags & CONTROL_FLAG_NEXT) {
-            ++f_step;
-        }
-        else {
-            /* Wait a while cause Linux side to switch task */
-            if ((f_step & 1) == 0) usleep(10000);
+    LinuxToBaremetal* recv_data = (LinuxToBaremetal*)buf;
+
+    reply->linux_to_baremetal_latency = timestamp - recv_data->send_timestamp;
     
-            XTime_GetTime(&reply.send_timestamp);
-            if (!VARIANT_WriteChan0((const uint8_t*)&reply, sizeof(reply))) {
-                xil_printf("rpmsg_send failed\r\n");
-            }
+    if (recv_data->control_flags & CONTROL_FLAG_SHUTDOWN) {
+        LPERROR("Shutdown request\r\n");
+        running = false;
+    }
+    else if (recv_data->control_flags & CONTROL_FLAG_NEXT) {
+        ++f_step;
+    }
+    else {
+        /* Wait a while cause Linux side to switch task */
+        if ((f_step & 1) == 0) usleep(5000);
+
+        XTime_GetTime(&reply->send_timestamp);
+        if (!VARIANT_WriteChan0((const uint8_t*)reply, packetSize)) {
+            xil_printf("rpmsg_send failed\r\n");
         }
     }
 

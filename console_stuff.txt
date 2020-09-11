@@ -7,6 +7,10 @@ exec program_flash -f dippa_linux_ipc_tunnel_cached.bin -fsbl zynq_fsbl.elf -fla
 echo variant-ipc-tunnel-v3 > /sys/class/remoteproc/remoteproc0/firmware
 echo start > /sys/class/remoteproc/remoteproc0/state
 
+mkdir /mnt/sd
+mount /dev/mmcblk0p1 /mnt/sd
+cd /mnt/sd/dippa
+
 modprobe rpmsg_char
 modprobe remoteproc
 

@@ -53,11 +53,16 @@ int main(int argc, char *argv[])
 {
     if (argc != 3) {
         std::cerr << "Expecting 2 parameters";
+        return 1;
     }
+    
+#ifdef IPC_TUNNEL_CACHED
+    f_nameSuffix += "-cached";
+#endif
     
     if (strcmp(argv[2], "shm") == 0 || strcmp(argv[2], "shm_w") == 0) {
         f_useShm = true;
-        f_nameSuffix = "-shm";
+        f_nameSuffix += "-shm";
         std::cerr << "Transferring T0 variable data using shared memory" << std::endl;
     }
     

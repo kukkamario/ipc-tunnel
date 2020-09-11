@@ -32,8 +32,8 @@ static char *get_rpmsg_ept_dev_name(const char *rpmsg_char_name,
                     const char *ept_name,
                     char *ept_dev_name)
 {
-    char sys_rpmsg_ept_name_path[64];
-    char svc_name[64];
+    char sys_rpmsg_ept_name_path[256];
+    char svc_name[256];
     const char *sys_rpmsg_path = "/sys/class/rpmsg";
     FILE *fp;
     int i;
@@ -267,7 +267,7 @@ bool OpenAMPComm::InitDev(int i, bool block)
     std::string channelName = "dippa-channel" + std::to_string(i);
     std::string rpmsg_dev="virtio0." + channelName + ".-1.0";
     
-    char rpmsg_char_name[16];
+    char rpmsg_char_name[256];
     char fpath[256];
     struct rpmsg_endpoint_info eptinfo;
     char ept_dev_name[16];
